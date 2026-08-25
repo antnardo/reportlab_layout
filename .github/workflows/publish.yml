@@ -24,7 +24,9 @@ jobs:
         if: github.event_name == 'release'
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          pkg=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          # Read it off the artefact that is about to be published, which also
+          # checks the build produced what the tag claims.
+          pkg=$(ls dist/*.whl | sed -E 's|.*/[^-]+-([^-]+)-.*|\1|')
           echo "tag=$tag package=$pkg"
           test "$tag" = "$pkg"
       - run: uvx twine check dist/*

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "reportlab_layout"
-version = "1.0.0"
+dynamic = ["version"]
 description = "A cursor-driven layout layer on top of reportlab: the flow of a document, with the canvas always within reach."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,6 +49,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
 ]
+
+# La version vit dans le module : une seule source, que le workflow de
+# publication compare au tag.
+[tool.hatch.version]
+path = "src/reportlab_layout/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reportlab_layout"]

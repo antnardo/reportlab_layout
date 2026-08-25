@@ -3,6 +3,31 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-08-25
+
+A documentation release. Nothing executable changed: same behaviour, same API,
+same output. What changed is everything you read around it.
+
+### Changed
+
+- Documentation, docstrings and comments are now in English throughout — the
+  reference, the changelog, the examples, the scripts and everything `help()`
+  and an IDE will show you.
+- `examples/attestation.py` is now `examples/certificate.py`.
+- The two centring figures are replaced by a single
+  `docs/img/centering.png`, reproducible from `scripts/centering_proof.py`
+  alone. The one it replaced was generated from a private module and could not
+  be rebuilt from this repository.
+
+### Fixed
+
+- Links and the figure on the package page. The 1.0.0 README used repository
+  paths relative to itself, which PyPI does not resolve, so they rendered dead.
+  They are absolute now.
+- The version is declared in one place only, `reportlab_layout.__version__`, and
+  read from there by the build. It used to be repeated in `pyproject.toml`,
+  where it could drift from the tag the publish workflow checks against.
+
 ## [1.0.0] — 2026-08-25
 
 First published release. `pdf_maker`, until now a private local module, is split
