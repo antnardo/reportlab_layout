@@ -1,4 +1,4 @@
-"""Primitives géométriques."""
+"""Geometric primitives."""
 
 import pytest
 from reportlab.pdfgen import canvas
@@ -21,7 +21,7 @@ class TestShapePainter:
         assert tuple(painter.rect(5, 5, 100, 50)) == pytest.approx((5, 5, 100, 50))
 
     def test_round_rect_clamps_an_oversized_radius(self, painter):
-        """Un rayon supérieur au demi-côté referme le tracé sur lui-même."""
+        """A radius larger than half the side folds the path back on itself."""
         assert tuple(painter.round_rect(0, 0, 20, 10, radius=50)) == pytest.approx((0, 0, 20, 10))
 
     def test_drawing_does_not_leak_the_stroke_colour(self, painter):
@@ -52,5 +52,5 @@ class TestToColor:
         assert to_color(None) is None
 
     def test_wrong_length_tuple_is_rejected(self):
-        with pytest.raises(ValueError, match="3 ou 4"):
+        with pytest.raises(ValueError, match="3 or 4"):
             to_color((1, 2))

@@ -1,17 +1,17 @@
-"""Une couche de mise en page à curseur au-dessus de reportlab.
+"""A cursor-driven layout layer on top of reportlab.
 
-Le canvas de reportlab dessine où on lui dit, en points, depuis le coin
-bas-gauche. Ses ``platypus`` templates, à l'inverse, gèrent le flux mais
-reprennent la main sur la page entière. Ce paquet occupe l'espace entre les
-deux : un curseur qui descend dans la page, et le canvas resté accessible pour
-tout ce qui doit être placé au point près.
+reportlab's canvas draws wherever you tell it, in points, from the bottom-left
+corner. Its platypus templates, on the other hand, handle flow but take over the
+whole page. This package fills the gap between the two: a cursor that moves down
+the page, and the canvas still within reach for anything that has to land on an
+exact point.
 
     from reportlab_layout import PDFMaker
 
-    with PDFMaker("bulletin.pdf", top=20) as doc:
-        doc.draw_paragraph("Bulletin du 3e trimestre", "Heading1 Centered")
+    with PDFMaker("report.pdf", top=20) as doc:
+        doc.draw_paragraph("Third-term report", "Heading1 Centered")
         doc.add_space()
-        doc.draw_table([["Matière", "Note"], ["Maths", "17"]])
+        doc.draw_table([["Subject", "Mark"], ["Maths", "17"]])
 """
 
 from reportlab_layout.boxes import Box

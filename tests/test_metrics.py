@@ -1,4 +1,4 @@
-"""Métriques de police — c'est ici que se vérifie le centrage vertical."""
+"""Font metrics -- where vertical centring is pinned down."""
 
 import pytest
 from reportlab.lib.styles import ParagraphStyle
@@ -42,12 +42,12 @@ class TestTextMetrics:
         assert baseline_offset(normal) == pytest.approx((ascent + descent) / 2)
 
     def test_baseline_offset_differs_from_half_height(self, normal):
-        """Le bug historique : centrer sur height/2 descend le texte de |descente|."""
+        """The historical bug: centring on height/2 drops the text by |descent|."""
         metrics = TextMetrics(normal)
         assert metrics.height / 2 - metrics.baseline_offset == pytest.approx(-metrics.descent)
 
     def test_middle_anchor_centers_the_em_box(self, normal):
-        """Ancrage 'middle' : le milieu de la boîte em tombe exactement sur y."""
+        """The 'middle' anchor: the em box centre lands exactly on y."""
         metrics = TextMetrics(normal)
         baseline = metrics.baseline(200, "middle")
         box_bottom = baseline + metrics.descent
@@ -79,12 +79,12 @@ class TestTextMetrics:
     )
     def test_left_edge_anchors(self, normal, halign, expected_shift):
         metrics = TextMetrics(normal)
-        width = metrics.width("Bonjour")
-        assert metrics.left_edge(100, "Bonjour", halign) == pytest.approx(100 + expected_shift * width)
+        width = metrics.width("Hello")
+        assert metrics.left_edge(100, "Hello", halign) == pytest.approx(100 + expected_shift * width)
 
     def test_unknown_halign_raises(self, normal):
         with pytest.raises(ValueError, match="halign"):
-            TextMetrics(normal).left_edge(0, "x", "centré")
+            TextMetrics(normal).left_edge(0, "x", "middle")
 
 
 class TestModuleHelpers:
@@ -98,12 +98,12 @@ class TestModuleHelpers:
 
 class TestCapHeight:
     def test_helvetica_cap_height_equals_its_ascent(self, stylesheet):
-        """Mesuré par rastérisation : la capitale d'Helvetica vaut son ascendante."""
+        """Measured by rasterisation: Helvetica's cap height equals its ascent."""
         metrics = TextMetrics(ParagraphStyle("h", fontName="Helvetica", fontSize=100))
         assert metrics.cap_height == pytest.approx(metrics.ascent)
 
     def test_times_cap_height_is_below_its_ascent(self):
-        """Chez Times, ascendante et hauteur de capitale diffèrent."""
+        """For Times, ascent and cap height differ."""
         metrics = TextMetrics(ParagraphStyle("t", fontName="Times-Roman", fontSize=100))
         assert metrics.cap_height == pytest.approx(66.2)
         assert metrics.cap_height < metrics.ascent
@@ -121,7 +121,7 @@ class TestCapHeight:
         assert baseline + metrics.cap_height / 2 == pytest.approx(200)
 
     def test_cap_sits_lower_than_the_em_box_middle(self, normal):
-        """Le centrage em réserve la place des jambages et remonte le texte."""
+        """Em centring reserves descender room and lifts the text."""
         metrics = TextMetrics(normal)
         assert metrics.baseline(200, "cap") < metrics.baseline(200, "middle")
 

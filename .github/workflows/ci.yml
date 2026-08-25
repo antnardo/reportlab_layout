@@ -19,17 +19,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - name: Installer
+      - name: Install
         run: |
           uv sync --group dev
           uv pip install "${{ matrix.reportlab }}"
-      - name: Version de reportlab sous test
+      - name: reportlab version under test
         run: uv run python -c "import reportlab, sys; print(reportlab.Version, sys.version)"
       - name: Lint
         run: |
           uv run ruff check src tests scripts examples
           uv run ruff format --check src tests scripts examples
-      - name: Tests
+      - name: Test
         run: uv run pytest -q
 
   types:

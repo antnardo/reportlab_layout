@@ -1,9 +1,9 @@
-"""Écriture dans un ``Frame`` reportlab.
+"""Writing into a reportlab ``Frame``.
 
-Un frame est une boîte à hauteur fixe que l'on remplit de flowables : reportlab
-gère le retour à la ligne et arrête d'écrire quand la boîte est pleine. Utile
-pour un encadré, un chapeau, une colonne. Ce qui n'a pas tenu est signalé au
-lieu de disparaître en silence.
+A frame is a fixed-height box you fill with flowables: reportlab handles the
+wrapping and stops writing once the box is full. Useful for a callout, a
+standfirst, a column. Whatever did not fit is reported rather than vanishing
+silently.
 """
 
 import logging
@@ -17,20 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 class FrameWriter:
-    """Remplit un ``Frame`` et rapporte le débordement."""
+    """Fills a ``Frame`` and reports the overflow."""
 
     def __init__(self, canvas: Canvas, frame: Frame) -> None:
         self._canvas = canvas
         self.frame = frame
 
     def write(self, story: list[Flowable]) -> list[Flowable]:
-        """Écrit ``story`` dans le frame et rend les flowables qui n'ont pas tenu.
+        """Write ``story`` into the frame and return the flowables that did not fit.
 
-        La liste passée est consommée par reportlab : ce qui reste dedans après
-        l'appel est exactement ce qui a débordé.
+        reportlab consumes the list it is given: whatever is left in it after
+        the call is exactly what overflowed.
         """
         remaining = list(story)
         self.frame.addFromList(remaining, self._canvas)
         if remaining:
-            logger.warning("Frame plein : %d élément(s) non inclus", len(remaining))
+            logger.warning("Frame full: %d item(s) left out", len(remaining))
         return remaining

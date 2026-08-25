@@ -1,8 +1,8 @@
-"""Une attestation d'une page : en-tête, corps en flux, encadré, pied de page.
+"""A one-page certificate: header, flowing body, callout box, footer.
 
-    uv run python examples/attestation.py
+    uv run python examples/certificate.py
 
-Produit ``attestation.pdf`` dans le répertoire courant.
+Writes ``certificate.pdf`` into the current directory.
 """
 
 from datetime import date
@@ -13,31 +13,31 @@ from reportlab.lib.units import mm
 from reportlab_layout import PDFMaker, add_style, make_stylesheet
 
 styles = make_stylesheet()
-add_style(styles, "Titre", parent="Heading1 Centered", fontSize=20, leading=24)
-add_style(styles, "Mention", parent="Small", textColor="#555555")
+add_style(styles, "Banner", parent="Heading1 Centered", fontSize=20, leading=24)
+add_style(styles, "Fineprint", parent="Small", textColor="#555555")
 
 
 def build(path: Path) -> Path:
     with PDFMaker(path, stylesheet=styles, top=25, bottom=20, auto_page_break=True) as doc:
-        doc.set_metadata(author="Service scolarité", title="Attestation")
-        doc.set_footer(doc.make_paragraph(f"Émis le {date.today():%d/%m/%Y}", "Right"))
+        doc.set_metadata(author="Registrar's office", title="Certificate of enrolment")
+        doc.set_footer(doc.make_paragraph(f"Issued {date.today():%d %B %Y}", "Right"))
 
-        doc.draw_paragraph("Attestation de scolarité", "Titre")
+        doc.draw_paragraph("Certificate of enrolment", "Banner")
         doc.draw_centered_line(wscale=0.4)
         doc.add_space(2)
 
         doc.draw_paragraph(
-            "Je soussigné, chef d'établissement, atteste que l'élève dont le nom figure "
-            "ci-dessous est régulièrement inscrit pour l'année scolaire en cours.",
+            "The undersigned head of school certifies that the student named below is "
+            "duly enrolled for the current academic year.",
             "Justify",
         )
         doc.add_space()
 
         doc.draw_table(
             [
-                ["Nom", "HOPPER"],
-                ["Prénom", "Grace"],
-                ["Classe", "MP2"],
+                ["Surname", "HOPPER"],
+                ["First name", "Grace"],
+                ["Class", "MP2"],
             ],
             col_widths=[40 * mm, doc.content_width - 40 * mm],
             style=[
@@ -51,7 +51,7 @@ def build(path: Path) -> Path:
         )
         doc.add_space(2)
 
-        # Un cartouche placé au point près : le canvas reste accessible.
+        # A callout placed to the point: the canvas stays within reach.
         box_height = 26 * mm
         top = doc.geometry.depth_to_y(doc.cursor.depth)
         doc.draw_round_rect(
@@ -63,23 +63,25 @@ def build(path: Path) -> Path:
             fill="#eef4fb",
             stroke="#3b6ea5",
         )
+        # A short label centred in a box: "cap", not "middle".
         doc.draw_string(
-            "Document sans valeur légale",
-            *(doc.x_left + doc.content_width / 2, top - box_height / 2),
+            "Not a legal document",
+            doc.x_left + doc.content_width / 2,
+            top - box_height / 2,
             style="Heading2",
             halign="center",
-            valign="middle",
+            valign="cap",
             color="#3b6ea5",
         )
         doc.advance(box_height)
         doc.add_space()
 
         doc.draw_paragraph(
-            "Toute rature rend le présent document nul. Il ne peut être reproduit qu'intégralement.",
-            "Mention",
+            "Any alteration voids this document. It may only be reproduced in full.",
+            "Fineprint",
         )
     return path
 
 
 if __name__ == "__main__":
-    print(build(Path("attestation.pdf")))
+    print(build(Path("certificate.pdf")))

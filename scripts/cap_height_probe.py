@@ -1,19 +1,19 @@
-"""Vérifie les hauteurs de capitale par rastérisation.
+"""Check the cap-height table by rasterisation.
 
-reportlab n'expose pas la hauteur de capitale des polices PostScript standard.
-:data:`reportlab_layout.metrics.STANDARD_CAP_HEIGHTS` la reprend de leurs
-fichiers AFM ; ce script la remesure sur le rendu réel pour contrôler la table.
+reportlab does not expose the cap height of the standard PostScript fonts.
+:data:`reportlab_layout.metrics.STANDARD_CAP_HEIGHTS` takes it from their AFM
+files; this script measures it again on the actual rendering to check the table.
 
     uv run python scripts/cap_height_probe.py
 
-Demande ``pdftoppm`` (poppler) sur le PATH.
+Needs ``pdftoppm`` (poppler) on the PATH.
 
-Lecture des résultats : poppler ne possède pas les polices Adobe et leur
-substitue les clones URW. Ceux-ci sont compatibles en **chasse**, pas forcément
-en hauteur de capitale. Helvetica tombe à 0,4 ‰ et Times-Roman à 1,2 ‰ de la
-table, ce qui la valide ; Courier (+18 ‰) et les variantes de Times affichent
-l'écart du clone, pas une erreur de la table — poppler rend d'ailleurs les
-quatre Times avec la même valeur, signe qu'il substitue une seule fonte.
+Reading the results: poppler does not have the Adobe fonts and substitutes the
+URW clones. Those match in **advance width**, not necessarily in cap height.
+Helvetica lands within 0.4 per mille of the table and Times-Roman within 1.2,
+which validates it; Courier (+18) and the Times variants show the clone's
+deviation, not an error in the table -- poppler in fact renders all four Times
+faces with the same value, which means it substitutes a single font.
 """
 
 import subprocess
@@ -33,7 +33,7 @@ PAGE = (900, 400)
 
 
 def measure(font: str, text: str, folder: Path) -> tuple[float, float]:
-    """Rend ``text`` et mesure l'encre, en millièmes de cadratin au-dessus de la ligne de base."""
+    """Render ``text`` and measure the ink, in thousandths of an em above the baseline."""
     pdf = folder / "probe.pdf"
     stem = folder / "probe"
     page = canvas.Canvas(str(pdf), pagesize=PAGE)
@@ -58,13 +58,13 @@ def main() -> int:
     worst = 0.0
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
-        print(f"{'police':<24} {'table':>7} {'mesuré':>8} {'écart':>8}")
+        print(f"{'font':<24} {'table':>7} {'measured':>9} {'gap':>7}")
         for font, published in STANDARD_CAP_HEIGHTS.items():
             measured, _ = measure(font, "H", folder)
             gap = measured - published
             worst = max(worst, abs(gap))
-            print(f"{font:<24} {published:>7} {measured:>8.1f} {gap:>+8.1f}")
-    print(f"\nÉcart maximal : {worst:.1f} ‰ de cadratin (voir l'en-tête du script)")
+            print(f"{font:<24} {published:>7} {measured:>9.1f} {gap:>+7.1f}")
+    print(f"\nLargest gap: {worst:.1f} per mille of an em (see the module docstring)")
     return 0 if worst < 25 else 1
 
 

@@ -1,11 +1,15 @@
-"""Preuve visuelle et chiffrée du centrage vertical du texte.
+"""Visual and numeric proof of vertical text centring.
 
-Trace la même chaîne dans une case, une fois avec l'ancienne formule
-(``y - hauteur/2``) et une fois avec l'ancrage ``valign="middle"`` du paquet.
-La case est barrée en son milieu : le texte correct doit être coupé au tiers
-supérieur des minuscules, pas plus bas.
+Draws the same string in a box three ways: with the formula this package used to
+get wrong (``y - height/2``), with ``valign="middle"`` (em box), and with
+``valign="cap"`` (cap box). Each box is ruled through its exact middle, so you
+can see where the ink actually lands.
 
     uv run python scripts/centering_proof.py
+
+To regenerate the figure used by the documentation::
+
+    pdftoppm -r 200 -png -singlefile centering.pdf docs/img/centering
 """
 
 from pathlib import Path
@@ -15,53 +19,69 @@ from reportlab.lib.units import mm
 from reportlab_layout import PDFMaker, make_stylesheet
 from reportlab_layout.metrics import TextMetrics
 
-TEXT = "Hxpg 24"
-CASE = (60 * mm, 16 * mm)
+BOX = (52 * mm, 15 * mm)
+COLUMNS = [
+    ("old formula", None),
+    ('valign="middle"', "middle"),
+    ('valign="cap"', "cap"),
+]
+ROWS = [
+    ("Hxpg 24", 1.0, "with descenders"),
+    ("ITEM 24", 0.6, "no descenders, 0.6 scale"),
+]
 
 
 def build(path: Path) -> Path:
     styles = make_stylesheet()
-    doc = PDFMaker(path, stylesheet=styles, pagesize=(150 * mm, 80 * mm), left=10, top=10)
+    doc = PDFMaker(path, stylesheet=styles, pagesize=(200 * mm, 78 * mm), left=10, top=10)
     style = styles["Heading2"]
 
-    for row, (label, scale) in enumerate([("corps nominal", 1.0), ("corps × 0,5", 0.5)]):
-        metrics = TextMetrics(style, scale)
-        y_center = doc.height - 25 * mm - row * 26 * mm
-
-        for column, legend in enumerate(["ancienne formule", "valign='middle'"]):
-            x = doc.x_left + column * 65 * mm
-            doc.draw_rect(x, y_center - CASE[1] / 2, *CASE, stroke="#bbbbbb")
-            doc.draw_line(x, y_center, x + CASE[0], y_center, stroke="#e05252", line_width=0.4)
-            if column == 0:
-                # Ce que faisait le code d'origine : décalage de height/2, et
-                # métriques lues au corps nominal quelle que soit l'échelle.
+    for row, (text, scale, note) in enumerate(ROWS):
+        y_center = doc.height - 24 * mm - row * 28 * mm
+        for column, (legend, valign) in enumerate(COLUMNS):
+            x = doc.x_left + column * 58 * mm
+            doc.draw_rect(x, y_center - BOX[1] / 2, *BOX, stroke="#bbbbbb")
+            doc.draw_line(x, y_center, x + BOX[0], y_center, stroke="#e05252", line_width=0.4)
+            if valign is None:
+                # What the original code did: an offset of height/2, with the
+                # metrics read at the nominal size whatever the drawing scale.
                 nominal = TextMetrics(style, 1.0)
                 doc.apply_style(style, scale)
                 doc.canvas.drawString(
-                    x + CASE[0] / 2 - nominal.width(TEXT) / 2,
+                    x + BOX[0] / 2 - nominal.width(text) / 2,
                     y_center - nominal.height / 2,
-                    TEXT,
+                    text,
                 )
             else:
                 doc.draw_string(
-                    TEXT,
-                    x + CASE[0] / 2,
+                    text,
+                    x + BOX[0] / 2,
                     y_center,
                     style=style,
                     scale=scale,
                     halign="center",
-                    valign="middle",
+                    valign=valign,
                 )
-            doc.draw_string(legend, x, y_center - CASE[1] / 2 - 4 * mm, style="Small", color="#777777")
+            doc.draw_string(legend, x, y_center - BOX[1] / 2 - 4.5 * mm, style="Small", color="#777777")
+        doc.draw_string(
+            note,
+            doc.x_left,
+            y_center + BOX[1] / 2 + 2.5 * mm,
+            style="Small",
+            scale=0.9,
+            color="#999999",
+        )
 
-        error = metrics.height / 2 - metrics.baseline_offset
-        print(f"{label:>14} : erreur verticale de l'ancienne formule = {error:6.2f} pt")
+    metrics = TextMetrics(style)
+    print(f"{'anchor':<16} {'baseline offset':>16} {'vs old formula':>16}")
+    old = metrics.height / 2
+    print(f"{'old formula':<16} {old:>15.2f}p {0.0:>15.2f}p")
+    for name, offset in (("middle", metrics.baseline_offset), ("cap", metrics.cap_offset)):
+        print(f"{name:<16} {offset:>15.2f}p {old - offset:>+15.2f}p")
 
     doc.save()
     return path
 
 
 if __name__ == "__main__":
-    print(build(Path("centrage.pdf")))
-    # Pour régénérer l'illustration de la documentation :
-    #   pdftoppm -r 200 -png -singlefile centrage.pdf docs/img/centrage
+    print(build(Path("centering.pdf")))

@@ -1,14 +1,13 @@
-"""Curseur de flux : profondeur d'écriture courante dans la page."""
+"""The flow cursor: how far down the page writing has reached."""
 
 __all__ = ["Cursor"]
 
 
 class Cursor:
-    """Suit la profondeur d'écriture, mesurée depuis le haut de la page.
+    """Tracks the writing depth, measured from the top of the page.
 
-    La profondeur croît vers le bas, contrairement à l'ordonnée du canvas
-    reportlab. La conversion est du ressort de
-    :class:`~reportlab_layout.geometry.PageGeometry`.
+    Depth grows downwards, unlike a reportlab canvas ordinate. Converting
+    between the two is :class:`~reportlab_layout.geometry.PageGeometry`'s job.
     """
 
     def __init__(self, top: float, bottom_depth: float) -> None:
@@ -21,7 +20,7 @@ class Cursor:
 
     @property
     def depth(self) -> float:
-        """Profondeur courante, en points."""
+        """Current depth, in points."""
         return self._depth
 
     @depth.setter
@@ -30,29 +29,29 @@ class Cursor:
 
     @property
     def top(self) -> float:
-        """Profondeur de départ, c'est-à-dire la marge haute."""
+        """Starting depth, that is, the top margin."""
         return self._top
 
     @property
     def bottom_depth(self) -> float:
-        """Profondeur de la limite basse de la zone de contenu."""
+        """Depth of the bottom edge of the content area."""
         return self._bottom_depth
 
     @property
     def remaining(self) -> float:
-        """Hauteur restante avant la marge basse. Négative en cas de débordement."""
+        """Height left before the bottom margin. Negative once overflowing."""
         return self._bottom_depth - self._depth
 
     def fits(self, height: float) -> bool:
-        """Vrai si un élément de hauteur ``height`` tient encore sur la page."""
+        """Whether an element ``height`` points tall still fits on the page."""
         return height <= self.remaining
 
     def reset(self) -> float:
-        """Ramène le curseur en haut de la zone de contenu."""
+        """Send the cursor back to the top of the content area."""
         self._depth = self._top
         return self._depth
 
     def advance(self, height: float) -> float:
-        """Descend le curseur de ``height`` points et rend la nouvelle profondeur."""
+        """Move the cursor down by ``height`` points and return the new depth."""
         self._depth += height
         return self._depth

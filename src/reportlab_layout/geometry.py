@@ -1,14 +1,13 @@
-"""Géométrie de page : format, marges et conversions de repères.
+"""Page geometry: size, margins, and conversion between coordinate systems.
 
-Deux repères coexistent dans ce paquet, et les confondre est la première source
-de bugs de mise en page :
+Two coordinate systems live side by side in this package, and confusing them is
+the first cause of layout bugs:
 
-* le **repère canvas** de reportlab, origine en bas à gauche, `y` croissant vers
-  le haut ;
-* la **profondeur** (`depth`), distance depuis le haut de la page, croissante
-  vers le bas, utilisée par le curseur de flux (:mod:`reportlab_layout.cursor`).
+* reportlab's **canvas frame**, origin at the bottom left, `y` growing upwards;
+* **depth**, the distance from the top of the page, growing downwards, used by
+  the flow cursor (:mod:`reportlab_layout.cursor`).
 
-:class:`PageGeometry` est le seul endroit où l'on passe de l'un à l'autre.
+:class:`PageGeometry` is the only place that converts between the two.
 """
 
 from dataclasses import dataclass
@@ -20,10 +19,10 @@ __all__ = ["Margins", "PageGeometry", "resolve_pagesize"]
 
 
 def resolve_pagesize(pagesize: str | tuple[float, float], landscape: bool = False) -> tuple[float, float]:
-    """Normalise un format de page en couple ``(largeur, hauteur)`` en points.
+    """Normalise a page size into a ``(width, height)`` pair, in points.
 
-    ``pagesize`` accepte un nom reconnu par ``reportlab.lib.pagesizes``
-    (``"A4"``, ``"letter"``, ``"A3"``…) ou un couple explicite.
+    ``pagesize`` accepts any name ``reportlab.lib.pagesizes`` knows (``"A4"``,
+    ``"letter"``, ``"A3"``...) or an explicit pair.
     """
     if isinstance(pagesize, str):
         try:
@@ -32,21 +31,21 @@ def resolve_pagesize(pagesize: str | tuple[float, float], landscape: bool = Fals
             try:
                 size = getattr(pagesizes, pagesize.lower())
             except AttributeError as exc:
-                raise ValueError(f"Format de page inconnu : {pagesize!r}") from exc
+                raise ValueError(f"Unknown page size: {pagesize!r}") from exc
         pagesize = size
     width, height = float(pagesize[0]), float(pagesize[1])
     if landscape and height > width:
         width, height = height, width
     elif not landscape and width > height:
-        # Un format explicitement paysage reste paysage : on ne redresse que si
-        # l'appelant a demandé le portrait sans le dire.
+        # A size given explicitly in landscape stays that way: we only straighten
+        # up when the caller asked for portrait without saying so.
         pass
     return width, height
 
 
 @dataclass(frozen=True, slots=True)
 class Margins:
-    """Marges d'une page, en points."""
+    """Page margins, in points."""
 
     left: float
     right: float
@@ -62,15 +61,15 @@ class Margins:
         bottom: float = 15,
         unit: float = mm,
     ) -> "Margins":
-        """Construit des marges exprimées en ``unit`` (millimètres par défaut)."""
+        """Build margins expressed in ``unit`` (millimetres by default)."""
         return cls(left * unit, right * unit, top * unit, bottom * unit)
 
 
 @dataclass(frozen=True, slots=True)
 class PageGeometry:
-    """Format de page et marges, avec la zone de contenu qui en découle.
+    """Page size and margins, plus the content area they leave.
 
-    Toutes les valeurs sont en points PostScript (1/72 de pouce).
+    Every value is in PostScript points (1/72 inch).
     """
 
     width: float
@@ -91,7 +90,7 @@ class PageGeometry:
         width, height = resolve_pagesize(pagesize, landscape)
         return cls(width, height, Margins.build(left, right, top, bottom, unit))
 
-    # -- zone de contenu ------------------------------------------------
+    # -- content area ---------------------------------------------------
     @property
     def content_width(self) -> float:
         return self.width - self.margins.left - self.margins.right
@@ -102,7 +101,7 @@ class PageGeometry:
 
     @property
     def x_left(self) -> float:
-        """Abscisse canvas du bord gauche de la zone de contenu."""
+        """Canvas abscissa of the left edge of the content area."""
         return self.margins.left
 
     @property
@@ -111,7 +110,7 @@ class PageGeometry:
 
     @property
     def y_top(self) -> float:
-        """Ordonnée canvas du haut de la zone de contenu."""
+        """Canvas ordinate of the top of the content area."""
         return self.height - self.margins.top
 
     @property
@@ -120,19 +119,19 @@ class PageGeometry:
 
     @property
     def content_box(self) -> tuple[float, float, float, float]:
-        """``(x, y, largeur, hauteur)`` de la zone de contenu, repère canvas."""
+        """``(x, y, width, height)`` of the content area, canvas coordinates."""
         return (self.x_left, self.y_bottom, self.content_width, self.content_height)
 
     @property
     def bottom_depth(self) -> float:
-        """Profondeur (depuis le haut) de la limite basse de la zone de contenu."""
+        """Depth, from the top, of the bottom edge of the content area."""
         return self.height - self.margins.bottom
 
     # -- conversions ----------------------------------------------------
     def depth_to_y(self, depth: float) -> float:
-        """Profondeur depuis le haut -> ordonnée canvas."""
+        """Depth from the top -> canvas ordinate."""
         return self.height - depth
 
     def y_to_depth(self, y: float) -> float:
-        """Ordonnée canvas -> profondeur depuis le haut."""
+        """Canvas ordinate -> depth from the top."""
         return self.height - y

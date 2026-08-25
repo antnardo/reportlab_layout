@@ -1,7 +1,7 @@
-"""Primitives géométriques : filets, rectangles, rectangles arrondis.
+"""Geometric primitives: rules, rectangles, rounded rectangles.
 
-Chaque tracé est encadré par ``saveState`` / ``restoreState`` : la couleur et
-l'épaisseur de trait choisies ici ne fuient pas vers le tracé suivant.
+Every drawing is wrapped in ``saveState`` / ``restoreState``, so the colour and
+line width chosen here do not leak into whatever is drawn next.
 """
 
 from reportlab.pdfgen.canvas import Canvas
@@ -13,7 +13,7 @@ __all__ = ["ShapePainter"]
 
 
 class ShapePainter:
-    """Trace des formes simples sur un canvas reportlab."""
+    """Draws simple shapes on a reportlab canvas."""
 
     def __init__(self, canvas: Canvas) -> None:
         self._canvas = canvas
@@ -21,7 +21,7 @@ class ShapePainter:
     def line(
         self, x1: float, y1: float, x2: float, y2: float, *, stroke: ColorLike = None, line_width: float = 0.5
     ) -> Box:
-        """Trace un segment. Rend sa boîte englobante."""
+        """Draw a line segment. Returns its bounding box."""
         canvas = self._canvas
         canvas.saveState()
         canvas.setLineWidth(line_width)
@@ -42,7 +42,7 @@ class ShapePainter:
         stroke: ColorLike = "black",
         line_width: float = 0.5,
     ) -> Box:
-        """Trace un rectangle. ``fill=None`` laisse l'intérieur vide."""
+        """Draw a rectangle. ``fill=None`` leaves the inside empty."""
         canvas = self._canvas
         fill_color = to_color(fill)
         stroke_color = to_color(stroke)
@@ -70,10 +70,10 @@ class ShapePainter:
         stroke: ColorLike = "black",
         line_width: float = 0.5,
     ) -> Box:
-        """Trace un rectangle à coins arrondis.
+        """Draw a rectangle with rounded corners.
 
-        ``radius`` est écrêté à la moitié du plus petit côté : au-delà, les arcs
-        se recouvrent et le tracé se referme sur lui-même.
+        ``radius`` is clamped to half the shorter side: beyond that the arcs
+        overlap and the path folds back on itself.
         """
         radius = max(0.0, min(radius, abs(width) / 2, abs(height) / 2))
         canvas = self._canvas

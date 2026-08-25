@@ -1,4 +1,4 @@
-"""Feuille de styles."""
+"""Stylesheets."""
 
 import pytest
 from reportlab.lib.enums import TA_CENTER
@@ -16,25 +16,25 @@ class TestMakeStylesheet:
 
     def test_each_call_returns_an_independent_sheet(self):
         first, second = make_stylesheet(), make_stylesheet()
-        add_style(first, "Titre", fontSize=42)
-        assert "Titre" not in second.byName
+        add_style(first, "Banner", fontSize=42)
+        assert "Banner" not in second.byName
 
 
 class TestAddStyle:
     def test_inherits_from_the_named_parent(self, stylesheet):
-        style = add_style(stylesheet, "Titre", parent="Heading1", fontSize=30)
+        style = add_style(stylesheet, "Banner", parent="Heading1", fontSize=30)
         assert style.fontName == stylesheet["Heading1"].fontName
         assert style.fontSize == 30
 
     def test_redefining_replaces_instead_of_raising(self, stylesheet):
-        add_style(stylesheet, "Titre", fontSize=30)
-        add_style(stylesheet, "Titre", fontSize=20)
-        assert stylesheet["Titre"].fontSize == 20
+        add_style(stylesheet, "Banner", fontSize=30)
+        add_style(stylesheet, "Banner", fontSize=20)
+        assert stylesheet["Banner"].fontSize == 20
 
     def test_replace_false_keeps_reportlab_behaviour(self, stylesheet):
-        add_style(stylesheet, "Titre", fontSize=30)
-        with pytest.raises(KeyError, match="déjà défini"):
-            add_style(stylesheet, "Titre", fontSize=20, replace=False)
+        add_style(stylesheet, "Banner", fontSize=30)
+        with pytest.raises(KeyError, match="already defined"):
+            add_style(stylesheet, "Banner", fontSize=20, replace=False)
 
 
 class TestResolveStyle:

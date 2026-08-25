@@ -1,4 +1,4 @@
-"""Document à curseur : flux, placement absolu, pagination."""
+"""The cursor document: flow, absolute placement, pagination."""
 
 import pytest
 from pypdf import PdfReader
@@ -30,7 +30,7 @@ class TestGeometryExport:
         )
 
     def test_exported_attributes_stay_writable(self, doc):
-        """oraux/edt recalculent y_top en cours de route : ce doit rester possible."""
+        """Subclasses recompute y_top as they go: that has to stay possible."""
         doc.y_top = 123
         assert doc.y_top == 123
 
@@ -41,11 +41,11 @@ class TestFlow:
 
     def test_paragraph_moves_the_cursor_down(self, doc):
         before = doc.cursor.depth
-        doc.draw_paragraph("Bonjour")
+        doc.draw_paragraph("Hello")
         assert doc.cursor.depth > before
 
     def test_successive_paragraphs_stack_downwards(self, doc):
-        first = doc.draw_paragraph("Premier")
+        first = doc.draw_paragraph("First")
         second = doc.draw_paragraph("Second")
         assert second.y < first.y
 
@@ -56,47 +56,47 @@ class TestFlow:
 
     def test_explicit_depth_leaves_the_cursor_alone(self, doc):
         before = doc.cursor.depth
-        doc.draw_paragraph("Ancré", y=100)
+        doc.draw_paragraph("Anchored", y=100)
         assert doc.cursor.depth == before
 
     def test_draw_returns_a_box(self, doc):
-        assert isinstance(doc.draw_paragraph("Bonjour"), Box)
+        assert isinstance(doc.draw_paragraph("Hello"), Box)
 
     def test_box_unpacks_as_four_numbers(self, doc):
-        _x, _y, width, height = doc.draw_paragraph("Bonjour")
+        _x, _y, width, height = doc.draw_paragraph("Hello")
         assert width > 0 and height > 0
 
     def test_halign_right_pushes_a_narrow_block_to_the_margin(self, doc):
-        left = doc.draw_paragraph("Bonjour", wscale=0.5)
-        right = doc.draw_paragraph("Bonjour", wscale=0.5, halign="right")
+        left = doc.draw_paragraph("Hello", wscale=0.5)
+        right = doc.draw_paragraph("Hello", wscale=0.5, halign="right")
         assert right.x - left.x == pytest.approx(doc.content_width / 2)
 
     def test_unknown_halign_is_rejected(self, doc):
         with pytest.raises(ValueError, match="halign"):
-            doc.draw_paragraph("Bonjour", halign="milieu")
+            doc.draw_paragraph("Hello", halign="middle")
 
 
 class TestAbsolutePlacement:
     def test_absolute_coordinates_are_points(self, doc):
-        box = doc.draw_paragraph("Bonjour", x=100, y=200, width=200, absolute=True)
+        box = doc.draw_paragraph("Hello", x=100, y=200, width=200, absolute=True)
         assert (box.x, box.y) == pytest.approx((100, 200))
 
     def test_valign_top_puts_the_top_edge_on_y(self, doc):
-        box = doc.draw_paragraph("Bonjour", x=100, y=200, width=200, absolute=True, valign="top")
+        box = doc.draw_paragraph("Hello", x=100, y=200, width=200, absolute=True, valign="top")
         assert box.top == pytest.approx(200)
 
     def test_valign_middle_centres_the_block(self, doc):
-        box = doc.draw_paragraph("Bonjour", x=100, y=200, width=200, absolute=True, valign="middle")
+        box = doc.draw_paragraph("Hello", x=100, y=200, width=200, absolute=True, valign="middle")
         assert box.center[1] == pytest.approx(200)
 
     def test_absolute_without_coordinates_is_rejected(self, doc):
-        with pytest.raises(ValueError, match="x et y explicites"):
-            doc.draw_paragraph("Bonjour", absolute=True)
+        with pytest.raises(ValueError, match="explicit x and y"):
+            doc.draw_paragraph("Hello", absolute=True)
 
 
 class TestPagination:
     def test_new_page_resets_the_cursor(self, doc):
-        doc.draw_paragraph("Bonjour")
+        doc.draw_paragraph("Hello")
         doc.new_page()
         assert doc.cursor.depth == pytest.approx(doc.top)
 
@@ -122,23 +122,23 @@ class TestPagination:
 class TestHeaderFooter:
     def test_footer_is_repeated_on_every_page(self, out, stylesheet):
         doc = PDFMaker(out, stylesheet=stylesheet)
-        doc.set_footer(doc.make_paragraph("Pied de page"))
-        doc.draw_paragraph("Page une")
+        doc.set_footer(doc.make_paragraph("Footer text"))
+        doc.draw_paragraph("Page one")
         doc.new_page()
-        doc.draw_paragraph("Page deux")
+        doc.draw_paragraph("Page two")
         doc.save()
-        assert "Pied de page" in page_text(out, 0)
-        assert "Pied de page" in page_text(out, 1)
+        assert "Footer text" in page_text(out, 0)
+        assert "Footer text" in page_text(out, 1)
 
     def test_footer_accepts_several_flowables(self, out, stylesheet):
         doc = PDFMaker(out, stylesheet=stylesheet)
-        doc.set_footer([doc.make_paragraph("Gauche"), doc.make_paragraph("Droite")])
+        doc.set_footer([doc.make_paragraph("Left"), doc.make_paragraph("Right side")])
         doc.save()
         text = page_text(out)
-        assert "Gauche" in text and "Droite" in text
+        assert "Left" in text and "Right side" in text
 
     def test_footer_does_not_move_the_cursor(self, doc):
-        doc.set_footer(doc.make_paragraph("Pied"))
+        doc.set_footer(doc.make_paragraph("Footer"))
         before = doc.cursor.depth
         doc.draw_header_footer()
         assert doc.cursor.depth == before
@@ -154,7 +154,7 @@ class TestTables:
         assert box.width == pytest.approx(120)
 
     def test_extra_style_commands_are_applied(self, doc):
-        """Une liste de commandes doit être acceptée telle quelle."""
+        """A plain list of commands has to be accepted as it comes."""
         doc.draw_table(
             [["a", "b"]],
             style=[("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("GRID", (0, 0), (-1, -1), 0.5, "black")],
@@ -163,7 +163,7 @@ class TestTables:
         assert read(doc.canvas._filename).pages
 
     def test_empty_table_is_rejected(self, doc):
-        with pytest.raises(ValueError, match="au moins une ligne"):
+        with pytest.raises(ValueError, match="at least one non-empty row"):
             doc.draw_table([])
 
 
@@ -175,7 +175,7 @@ class TestImages:
 
 class TestDirectDrawing:
     def test_draw_string_centres_at_any_scale(self, doc):
-        box = doc.draw_string("Titre", 300, 400, halign="center", valign="middle", scale=0.6)
+        box = doc.draw_string("Title", 300, 400, halign="center", valign="middle", scale=0.6)
         assert box.center == pytest.approx((300, 400))
 
     def test_apply_style_arms_the_canvas_font(self, doc):
@@ -198,35 +198,35 @@ class TestDirectDrawing:
 class TestFrames:
     def test_frame_paragraph_lands_in_the_pdf(self, doc):
         doc.new_frame(height=60)
-        doc.frame_paragraph("Dans le cadre")
+        doc.frame_paragraph("Inside the frame")
         doc.save()
-        assert "Dans le cadre" in page_text(doc.canvas._filename)
+        assert "Inside the frame" in page_text(doc.canvas._filename)
 
     def test_overflow_is_reported_not_swallowed(self, doc):
         doc.new_frame(height=12)
-        leftover = doc.draw_frame([doc.make_paragraph("Bonjour " * 200)])
+        leftover = doc.draw_frame([doc.make_paragraph("Hello " * 200)])
         assert leftover
 
     def test_frame_before_new_frame_is_rejected(self, doc):
-        with pytest.raises(RuntimeError, match="Aucun frame actif"):
+        with pytest.raises(RuntimeError, match="No active frame"):
             doc.frame_space()
 
 
 class TestLifecycle:
     def test_context_manager_writes_the_file(self, out, stylesheet):
         with PDFMaker(out, stylesheet=stylesheet) as doc:
-            doc.draw_paragraph("Bonjour")
-        assert "Bonjour" in page_text(out)
+            doc.draw_paragraph("Hello")
+        assert "Hello" in page_text(out)
 
     def test_context_manager_does_not_write_on_error(self, out, stylesheet):
         with pytest.raises(RuntimeError), PDFMaker(out, stylesheet=stylesheet) as doc:
-            doc.draw_paragraph("Bonjour")
-            raise RuntimeError("échec")
+            doc.draw_paragraph("Hello")
+            raise RuntimeError("boom")
         assert not out.exists()
 
     def test_metadata_reaches_the_pdf(self, out, stylesheet):
         doc = PDFMaker(out, stylesheet=stylesheet)
-        doc.set_metadata(author="A. Marchand", title="Essai")
-        doc.draw_paragraph("Bonjour")
+        doc.set_metadata(author="A. Marchand", title="Test")
+        doc.draw_paragraph("Hello")
         doc.save()
         assert read(out).metadata.author == "A. Marchand"

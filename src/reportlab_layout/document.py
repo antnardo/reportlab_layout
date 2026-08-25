@@ -1,20 +1,18 @@
-"""Document PDF à curseur : assemble géométrie, curseur, styles et tracés.
+"""The cursor-driven PDF document: geometry, cursor, styles and drawing.
 
-:class:`PDFMaker` pilote un ``canvas`` reportlab avec un curseur qui descend
-dans la page à mesure qu'on y dépose des éléments — le confort d'un document à
-flux, sans renoncer au positionnement absolu quand on en a besoin.
+:class:`PDFMaker` drives a reportlab ``canvas`` with a cursor that moves down
+the page as elements are laid onto it -- the convenience of a flowing document,
+without giving up absolute positioning when you need it.
 
-Deux modes de placement cohabitent, et chaque méthode ``draw_*`` accepte les
-deux :
+Two placement modes live side by side, and every ``draw_*`` method accepts both:
 
-* **flux** (défaut) : ni ``x`` ni ``y``, l'élément se pose sous le précédent et
-  le curseur descend d'autant ;
-* **absolu** (``absolute=True``) : ``x`` et ``y`` sont des coordonnées canvas en
-  **points**, le curseur n'est pas touché.
+* **flow** (the default): no ``x``, no ``y``; the element lands under the
+  previous one and the cursor moves down by its height;
+* **absolute** (``absolute=True``): ``x`` and ``y`` are canvas coordinates in
+  **points**, and the cursor is left alone.
 
-Entre les deux, donner ``x`` et/ou ``y`` sans ``absolute`` les interprète en
-``unit`` (millimètres par défaut), ``y`` étant une profondeur depuis le haut de
-la page.
+In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
+``unit`` (millimetres by default), ``y`` being a depth from the top of the page.
 """
 
 import logging
@@ -46,22 +44,22 @@ TableCommand: TypeAlias = tuple[Any, ...]
 
 
 class PDFMaker:
-    """Un document PDF construit page à page, avec un curseur de flux.
+    """A PDF document built page by page, with a flow cursor.
 
-    :param path: fichier de sortie.
-    :param pagesize: nom (``"A4"``, ``"letter"``…) ou couple ``(largeur, hauteur)``
-        en points.
-    :param landscape: bascule le format en paysage.
-    :param unit: unité des coordonnées passées aux méthodes ``draw_*``
-        (``reportlab.lib.units.mm`` par défaut).
-    :param left, right, top, bottom: marges, exprimées en ``unit``.
-    :param font_size: corps de référence, utilisé par :meth:`add_space`.
-    :param stylesheet: feuille de styles ; par défaut la feuille partagée
+    :param path: the output file.
+    :param pagesize: a name (``"A4"``, ``"letter"``...) or a ``(width, height)``
+        pair in points.
+    :param landscape: flip the page size to landscape.
+    :param unit: the unit of the coordinates passed to the ``draw_*`` methods
+        (``reportlab.lib.units.mm`` by default).
+    :param left, right, top, bottom: margins, expressed in ``unit``.
+    :param font_size: the reference type size, used by :meth:`add_space`.
+    :param stylesheet: the stylesheet; defaults to the shared
         :data:`reportlab_layout.styles.STYLES`.
-    :param auto_page_break: saute à la page suivante quand un élément déborde de
-        la marge basse.
-    :param show_boundaries: trace la boîte de chaque élément posé — pour mettre
-        au point une mise en page.
+    :param auto_page_break: start a new page when an element would overflow the
+        bottom margin.
+    :param show_boundaries: outline the box of every element laid down -- for
+        debugging a layout.
     """
 
     def __init__(
@@ -100,7 +98,7 @@ class PDFMaker:
         self.shapes = ShapePainter(self.canvas)
         self.text = TextPainter(self.canvas, self.stylesheet)
 
-        #: Hauteur ajoutée par :meth:`add_space` sans argument, en corps.
+        #: Height :meth:`add_space` adds when called bare, in type sizes.
         self.default_space = 1.0
         self.header: list[Flowable] = []
         self.footer: list[Flowable] = []
@@ -111,10 +109,10 @@ class PDFMaker:
         self.canvas.setFontSize(self.font_size)
 
     def _export_geometry(self) -> None:
-        """Recopie les grandeurs de page en attributs, pour la lisibilité.
+        """Copy the page dimensions onto attributes, for readability.
 
-        Ce sont des instantanés modifiables, pas des propriétés : un document
-        dérivé peut les ajuster sans que la géométrie de référence bouge.
+        These are mutable snapshots, not properties: a derived document can
+        adjust them without disturbing the reference geometry.
         """
         geometry = self.geometry
         self.width = geometry.width
@@ -132,7 +130,7 @@ class PDFMaker:
         self.bottom_depth = geometry.bottom_depth
 
     # ------------------------------------------------------------------
-    # Cycle de vie
+    # Lifecycle
     # ------------------------------------------------------------------
     def __enter__(self) -> "PDFMaker":
         return self
@@ -142,66 +140,66 @@ class PDFMaker:
             self.save()
 
     def set_metadata(self, author: str = "", title: str = "", subject: str = "") -> None:
-        """Renseigne les métadonnées du PDF."""
+        """Set the PDF metadata."""
         self.canvas.setAuthor(author)
         self.canvas.setTitle(title)
         self.canvas.setSubject(subject)
 
     def new_page(self) -> int:
-        """Termine la page courante — en-tête et pied compris — et en ouvre une neuve."""
+        """Finish the current page -- header and footer included -- and open a fresh one."""
         self.draw_header_footer()
         self.canvas.showPage()
         self.page += 1
-        logger.debug("Nouvelle page [%d]", self.page)
+        logger.debug("New page [%d]", self.page)
         self.cursor.reset()
         return self.page
 
     def save(self) -> None:
-        """Écrit l'en-tête et le pied de la dernière page, puis le fichier."""
+        """Draw the last page's header and footer, then write the file."""
         self.draw_header_footer()
         self.canvas.save()
 
     # ------------------------------------------------------------------
-    # Curseur
+    # Cursor
     # ------------------------------------------------------------------
     @property
     def remaining_height(self) -> float:
-        """Hauteur disponible sous le curseur, en points."""
+        """Height available below the cursor, in points."""
         return self.cursor.remaining
 
     @property
     def cursor_y(self) -> float:
-        """Ordonnée canvas de la position courante du curseur, en points."""
+        """Canvas ordinate of the cursor's current position, in points."""
         return self.geometry.depth_to_y(self.cursor.depth)
 
     @property
     def cursor_point(self) -> tuple[float, float]:
-        """Position courante du curseur en coordonnées canvas ``(x, y)``."""
+        """The cursor's current position as canvas coordinates ``(x, y)``."""
         return (self.left, self.cursor_y)
 
     def reset_cursor(self) -> float:
-        """Ramène le curseur en haut de la zone de contenu."""
+        """Send the cursor back to the top of the content area."""
         return self.cursor.reset()
 
     def advance(self, height: float) -> float:
-        """Descend le curseur de ``height`` **points**."""
+        """Move the cursor down by ``height`` **points**."""
         return self.cursor.advance(height)
 
     def add_space(self, space: float | None = None) -> float:
-        """Descend le curseur de ``space`` corps de référence."""
+        """Move the cursor down by ``space`` reference type sizes."""
         if space is None:
             space = self.default_space
         return self.cursor.advance(space * self.font_size)
 
     # ------------------------------------------------------------------
-    # Fabriques de flowables
+    # Flowable factories
     # ------------------------------------------------------------------
     def make_paragraph(self, text: str, style: StyleLike = None) -> Paragraph:
-        """Construit un ``Paragraph`` avec le style demandé."""
+        """Build a ``Paragraph`` with the requested style."""
         return Paragraph(text, style=resolve_style(style, self.stylesheet))
 
     def make_spacer(self, space: float = 1) -> Spacer:
-        """Construit un ``Spacer`` de ``space`` corps de référence."""
+        """Build a ``Spacer`` of ``space`` reference type sizes."""
         return Spacer(self.content_width, space * self.font_size)
 
     def make_table(
@@ -210,13 +208,13 @@ class PDFMaker:
         col_widths: float | list[float] | None = None,
         row_heights: float | list[float] | None = None,
     ) -> Table:
-        """Construit un ``Table``.
+        """Build a ``Table``.
 
-        ``col_widths`` non fourni répartit la largeur de contenu à parts égales.
-        Un scalaire s'applique à toutes les colonnes.
+        Without ``col_widths`` the content width is split evenly. A scalar
+        applies to every column.
         """
         if not data or not data[0]:
-            raise ValueError("Un tableau demande au moins une ligne non vide")
+            raise ValueError("A table needs at least one non-empty row")
         columns = len(data[0])
         if col_widths is None:
             col_widths = [self.content_width / columns] * columns
@@ -231,14 +229,14 @@ class PDFMaker:
         height: float | None = None,
         scale: float | None = None,
     ) -> Image:
-        """Construit un flowable ``Image`` dimensionné en points."""
+        """Build an ``Image`` flowable sized in points."""
         return load_image(spec, width=width, height=height, scale=scale)
 
     # ------------------------------------------------------------------
     # Placement
     # ------------------------------------------------------------------
     def _wrap_size(self, width: float | None, height: float | None) -> tuple[float, float]:
-        """Encombrement maximal proposé au flowable pour son calcul de retour à la ligne."""
+        """The largest space offered to the flowable when it works out its wrapping."""
         return (
             self.content_width if width is None else width,
             self.height if height is None else height,
@@ -254,11 +252,11 @@ class PDFMaker:
         halign: str,
         wscale: float,
     ) -> tuple[float, float]:
-        """Coin bas-gauche, en points, d'un élément de hauteur ``height``.
+        """Bottom-left corner, in points, of an element ``height`` points tall.
 
-        ``x`` et ``y`` sont en ``unit`` ; ``y`` est une profondeur depuis le haut
-        de la page. ``None`` signifie « marge gauche » pour ``x`` et « position
-        courante du curseur » pour ``y``.
+        ``x`` and ``y`` are in ``unit``; ``y`` is a depth from the top of the
+        page. ``None`` means "left margin" for ``x`` and "wherever the cursor
+        is" for ``y``.
         """
         x = self.left if x is None else x * self.unit
         free = (1 - wscale) * self.content_width
@@ -267,7 +265,7 @@ class PDFMaker:
         elif halign == "center":
             x += free / 2
         elif halign != "left":
-            raise ValueError(f"halign doit valoir 'left', 'center' ou 'right', reçu {halign!r}")
+            raise ValueError(f"halign must be 'left', 'center' or 'right', got {halign!r}")
         depth = self.cursor.depth + before * self.unit if y is None else y * self.unit
         return x, self.geometry.depth_to_y(depth) - height - space_before
 
@@ -287,17 +285,17 @@ class PDFMaker:
         page_break: bool | None = None,
         show_boundary: bool | None = None,
     ) -> Box:
-        """Pose un flowable et rend la boîte qu'il occupe.
+        """Lay a flowable down and return the box it occupies.
 
-        Le curseur ne descend que si l'élément a été posé en flux, c'est-à-dire
-        si ``y`` vaut ``None`` et ``absolute`` est faux.
+        The cursor only moves when the element was placed in flow, that is when
+        ``y`` is ``None`` and ``absolute`` is false.
 
-        ``valign`` ne s'applique qu'en mode absolu et dit ce que désigne ``y`` :
-        le bas de l'élément (``"bottom"``, défaut), son milieu (``"middle"``) ou
-        son sommet (``"top"``).
+        ``valign`` only applies in absolute mode and says what ``y`` refers to:
+        the element's bottom (``"bottom"``, the default), its middle
+        (``"middle"``) or its top (``"top"``).
 
-        ``page_break`` à ``None`` suit le réglage ``auto_page_break`` du
-        document ; ``True`` ou ``False`` le forcent pour cet appel.
+        ``page_break`` at ``None`` follows the document's ``auto_page_break``
+        setting; ``True`` or ``False`` force it for this call.
         """
         flow = y is None and not absolute
         allow_break = self.auto_page_break if page_break is None else page_break
@@ -330,12 +328,12 @@ class PDFMaker:
         valign: str,
         wscale: float,
     ) -> Box:
-        """Calcule la boîte d'un flowable sans le dessiner."""
+        """Work out a flowable's box without drawing it."""
         wrap_width, wrap_height = self._wrap_size(width, height)
         actual_width, actual_height = flowable.wrapOn(self.canvas, wrap_width, wrap_height)
         if absolute:
             if x is None or y is None:
-                raise ValueError("absolute=True demande x et y explicites, en points")
+                raise ValueError("absolute=True needs explicit x and y, in points")
             offset = {"bottom": 0.0, "middle": actual_height / 2, "top": actual_height}[valign]
             return Box(x, y - offset, actual_width, actual_height)
         anchor_x, anchor_y = self._anchor(
@@ -344,10 +342,10 @@ class PDFMaker:
         return Box(anchor_x, anchor_y, actual_width, actual_height)
 
     # ------------------------------------------------------------------
-    # Tracés à flux
+    # Drawing in flow
     # ------------------------------------------------------------------
     def draw_paragraph(self, text: str, style: StyleLike = None, **kwargs: Any) -> Box:
-        """Pose un paragraphe. Les mots-clés sont ceux de :meth:`draw`."""
+        """Lay down a paragraph. The keywords are :meth:`draw`'s."""
         return self.draw(self.make_paragraph(text, style), **kwargs)
 
     def draw_table(
@@ -358,11 +356,11 @@ class PDFMaker:
         style: Iterable[TableCommand] | TableStyle | None = None,
         **kwargs: Any,
     ) -> Box:
-        """Pose un tableau.
+        """Lay down a table.
 
-        ``style`` est une suite de commandes reportlab
-        (``("GRID", (0, 0), (-1, -1), 0.5, colors.black)``) ou un ``TableStyle``
-        déjà construit. Par défaut, les cellules sont centrées verticalement.
+        ``style`` is a sequence of reportlab commands
+        (``("GRID", (0, 0), (-1, -1), 0.5, colors.black)``) or a ``TableStyle``
+        already built. Cells are middle-aligned vertically by default.
         """
         table = self.make_table(data, col_widths=col_widths, row_heights=row_heights)
         if style is None:
@@ -378,14 +376,14 @@ class PDFMaker:
         scale: float | None = None,
         **kwargs: Any,
     ) -> Box:
-        """Pose une image. ``width``, ``height`` et ``scale`` sont en points."""
+        """Lay down an image. ``width``, ``height`` and ``scale`` are in points."""
         return self.draw(self.make_image(spec, width=width, height=height, scale=scale), **kwargs)
 
     def draw_centered_line(self, y: float | None = None, wscale: float = 1.0, **kwargs: Any) -> Box:
-        """Trace un filet horizontal centré sur la largeur de contenu.
+        """Draw a horizontal rule centred on the content width.
 
-        ``y`` est une profondeur en ``unit`` ; sans ``y``, le filet se place à la
-        position du curseur, qui descend ensuite d'un espacement.
+        ``y`` is a depth in ``unit``; without ``y`` the rule lands at the
+        cursor, which then moves down by one space.
         """
         if y is None:
             depth = self.cursor.depth - self.font_size / 2
@@ -397,14 +395,14 @@ class PDFMaker:
         return self.shapes.line(x1, line_y, x1 + wscale * self.content_width, line_y, **kwargs)
 
     # ------------------------------------------------------------------
-    # En-tête et pied de page
+    # Header and footer
     # ------------------------------------------------------------------
     def set_header(self, content: Flowable | Iterable[Flowable] | None) -> None:
-        """Fixe l'en-tête redessiné sur chaque page."""
+        """Set the header redrawn on every page."""
         self.header = self._as_flowables(content)
 
     def set_footer(self, content: Flowable | Iterable[Flowable] | None) -> None:
-        """Fixe le pied de page redessiné sur chaque page."""
+        """Set the footer redrawn on every page."""
         self.footer = self._as_flowables(content)
 
     @staticmethod
@@ -416,9 +414,9 @@ class PDFMaker:
         return list(content)
 
     def draw_header_footer(self) -> None:
-        """Dessine en-tête et pied sur la page courante.
+        """Draw the header and footer on the current page.
 
-        Appelée automatiquement par :meth:`new_page` et :meth:`save`.
+        Called for you by :meth:`new_page` and :meth:`save`.
         """
         for flowable in self._as_flowables(self.footer):
             self.draw(flowable, y=self.bottom_depth / self.unit, page_break=False)
@@ -438,14 +436,14 @@ class PDFMaker:
         halign: str = "left",
         show_boundary: bool = False,
     ) -> Frame:
-        """Ouvre un frame à la position du curseur et l'y fait descendre.
+        """Open a frame at the cursor and move the cursor past it.
 
-        ``height`` est en points ; sans valeur, il vaut un corps de référence.
+        ``height`` is in points; left out, it is one reference type size.
         """
         if height is None:
             height = self.font_size
         anchor_x, anchor_y = self._anchor(x, y, height, before, 0, halign, wscale)
-        logger.debug("Nouveau frame en (%.1f, %.1f)", anchor_x, anchor_y)
+        logger.debug("New frame at (%.1f, %.1f)", anchor_x, anchor_y)
         self.active_frame = Frame(
             anchor_x, anchor_y, wscale * self.content_width, height, showBoundary=show_boundary
         )
@@ -453,19 +451,19 @@ class PDFMaker:
         return self.active_frame
 
     def draw_frame(self, story: list[Flowable], space: float = 0) -> list[Flowable]:
-        """Écrit ``story`` dans le frame courant et rend ce qui n'a pas tenu."""
+        """Write ``story`` into the current frame and return what did not fit."""
         if self.active_frame is None:
-            raise RuntimeError("Aucun frame actif : appeler new_frame() d'abord")
+            raise RuntimeError("No active frame: call new_frame() first")
         if space > 0:
             story = [*story, self.make_spacer(space)]
         return FrameWriter(self.canvas, self.active_frame).write(story)
 
     def frame_paragraph(self, text: str, style: StyleLike = None, space: float = 0) -> list[Flowable]:
-        """Écrit un paragraphe dans le frame courant."""
+        """Write a paragraph into the current frame."""
         return self.draw_frame([self.make_paragraph(text, style)], space)
 
     def frame_space(self, space: float = 1) -> list[Flowable]:
-        """Ajoute un espacement dans le frame courant."""
+        """Add a spacer inside the current frame."""
         return self.draw_frame([], space)
 
     def frame_image(
@@ -475,25 +473,25 @@ class PDFMaker:
         space: float = 0,
         halign: str = "CENTER",
     ) -> list[Flowable]:
-        """Écrit une image dans le frame courant. ``width`` est en points."""
+        """Write an image into the current frame. ``width`` is in points."""
         image = self.make_image(spec, width=width)
         image.hAlign = halign
         return self.draw_frame([image], space)
 
     # ------------------------------------------------------------------
-    # Tracés directs
+    # Drawing directly
     # ------------------------------------------------------------------
     def metrics(self, style: StyleLike = None, scale: float = 1.0) -> TextMetrics:
-        """Métriques du style demandé, à l'échelle demandée."""
+        """Metrics for the requested style, at the requested scale."""
         return TextMetrics(resolve_style(style, self.stylesheet), scale)
 
     def apply_style(
         self, style: StyleLike = None, scale: float = 1.0, color: ColorLike = None
     ) -> TextMetrics:
-        """Arme la police et la couleur du canvas pour un tracé direct.
+        """Arm the canvas font and colour for a direct drawing call.
 
-        Utile avant d'appeler soi-même ``document.canvas.drawString``. Les
-        méthodes ``draw_string*`` le font déjà.
+        Useful before calling ``document.canvas.drawString`` yourself. The
+        ``draw_string`` method already does it.
         """
         metrics = self.metrics(style, scale)
         self.canvas.setFont(metrics.font_name, metrics.font_size)
@@ -502,24 +500,23 @@ class PDFMaker:
         return metrics
 
     def draw_string(self, text: str, x: float, y: float, **kwargs: Any) -> Box:
-        """Trace une chaîne ancrée en ``(x, y)``, coordonnées canvas en points.
+        """Draw a string anchored at ``(x, y)``, canvas coordinates in points.
 
-        Mots-clés : ``style``, ``scale``, ``color``, ``halign``
+        Keywords: ``style``, ``scale``, ``color``, ``halign``
         (``left``/``center``/``right``), ``valign``
         (``baseline``/``middle``/``cap``/``top``/``bottom``), ``angle``, ``dx``,
-        ``dy``.
-        Voir :meth:`reportlab_layout.text.TextPainter.draw`.
+        ``dy``. See :meth:`reportlab_layout.text.TextPainter.draw`.
         """
         return self.text.draw(text, x, y, **kwargs)
 
     def draw_line(self, x1: float, y1: float, x2: float, y2: float, **kwargs: Any) -> Box:
-        """Trace un segment, coordonnées canvas en points."""
+        """Draw a line segment, canvas coordinates in points."""
         return self.shapes.line(x1, y1, x2, y2, **kwargs)
 
     def draw_rect(self, x: float, y: float, width: float, height: float, **kwargs: Any) -> Box:
-        """Trace un rectangle, coordonnées canvas en points."""
+        """Draw a rectangle, canvas coordinates in points."""
         return self.shapes.rect(x, y, width, height, **kwargs)
 
     def draw_round_rect(self, x: float, y: float, width: float, height: float, **kwargs: Any) -> Box:
-        """Trace un rectangle à coins arrondis, coordonnées canvas en points."""
+        """Draw a rounded rectangle, canvas coordinates in points."""
         return self.shapes.round_rect(x, y, width, height, **kwargs)

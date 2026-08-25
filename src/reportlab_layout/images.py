@@ -1,8 +1,8 @@
-"""Images bitmap : lecture des dimensions et mise à l'échelle.
+"""Bitmap images: reading their size and scaling them.
 
-``reportlab.platypus.Image`` sait charger un fichier mais pas conserver son
-rapport d'aspect si on ne lui donne qu'une dimension. :class:`ImageSpec` lit la
-taille en pixels une fois pour toutes et calcule l'autre dimension.
+``reportlab.platypus.Image`` can load a file but will not preserve its aspect
+ratio when given only one dimension. :class:`ImageSpec` reads the pixel size
+once and works the other dimension out.
 """
 
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ __all__ = ["ImageSpec", "image_spec", "load_image"]
 
 @dataclass(frozen=True, slots=True)
 class ImageSpec:
-    """Chemin d'une image et ses dimensions en pixels."""
+    """An image's path and its size in pixels."""
 
     path: Path
     width: int
@@ -24,7 +24,7 @@ class ImageSpec:
 
     @property
     def aspect(self) -> float:
-        """Rapport hauteur / largeur."""
+        """Height over width."""
         return self.height / self.width
 
     def scaled(
@@ -33,15 +33,15 @@ class ImageSpec:
         height: float | None = None,
         scale: float | None = None,
     ) -> tuple[float, float]:
-        """Dimensions de tracé en points, à partir d'une seule contrainte.
+        """Drawing size in points, derived from a single constraint.
 
-        Exactement une des trois contraintes doit être fournie — sauf si
-        ``width`` et ``height`` sont données ensemble, auquel cas le rapport
-        d'aspect n'est pas conservé, ce qui est parfois voulu.
+        Exactly one of the three must be given -- unless ``width`` and
+        ``height`` are given together, in which case the aspect ratio is not
+        preserved, which is sometimes what you want.
         """
         if scale is not None:
             if width is not None or height is not None:
-                raise ValueError("scale est exclusif de width et height")
+                raise ValueError("scale is exclusive of width and height")
             return self.width * scale, self.height * scale
         if width is not None and height is not None:
             return float(width), float(height)
@@ -49,11 +49,11 @@ class ImageSpec:
             return float(width), width * self.aspect
         if height is not None:
             return height / self.aspect, float(height)
-        raise ValueError("Fournir width, height ou scale")
+        raise ValueError("Give one of width, height or scale")
 
 
 def image_spec(path: str | Path) -> ImageSpec:
-    """Lit les dimensions en pixels de l'image ``path``."""
+    """Read the pixel size of the image at ``path``."""
     path = Path(path)
     with PILImage.open(path) as image:
         width, height = image.size
@@ -66,9 +66,9 @@ def load_image(
     height: float | None = None,
     scale: float | None = None,
 ) -> Image:
-    """Rend un flowable ``Image`` dimensionné en points.
+    """Return an ``Image`` flowable sized in points.
 
-    ``spec`` peut être un :class:`ImageSpec` déjà lu ou un simple chemin.
+    ``spec`` may be an :class:`ImageSpec` already read, or just a path.
     """
     if not isinstance(spec, ImageSpec):
         spec = image_spec(spec)

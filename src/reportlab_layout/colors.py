@@ -1,4 +1,4 @@
-"""Conversion des couleurs vers le type attendu par reportlab."""
+"""Coercing colours into the type reportlab expects."""
 
 from typing import TypeAlias
 
@@ -6,17 +6,17 @@ from reportlab.lib.colors import Color, HexColor, toColor
 
 __all__ = ["ColorLike", "to_color"]
 
-#: Tout ce qui peut désigner une couleur dans ce paquet. ``None`` signifie
-#: « conserver la couleur courante du canvas ».
+#: Anything that can name a colour in this package. ``None`` means "leave the
+#: canvas colour alone".
 ColorLike: TypeAlias = Color | str | tuple[float, ...] | list[float] | None
 
 
 def to_color(value: ColorLike) -> Color | None:
-    """Normalise une couleur en ``reportlab.lib.colors.Color``.
+    """Normalise a colour into a ``reportlab.lib.colors.Color``.
 
-    Accepte un ``Color``, un nom CSS ou une chaîne ``"#rrggbb"``, un triplet ou
-    quadruplet de flottants dans ``[0, 1]``. ``None`` est rendu tel quel : il
-    signifie « ne pas toucher à la couleur courante ».
+    Accepts a ``Color``, a CSS name or a ``"#rrggbb"`` string, and 3- or
+    4-tuples of floats in ``[0, 1]``. ``None`` passes through: it means "do not
+    touch the current colour".
     """
     if value is None or isinstance(value, Color):
         return value
@@ -27,5 +27,5 @@ def to_color(value: ColorLike) -> Color | None:
             return Color(*value)
         if len(value) == 4:
             return Color(value[0], value[1], value[2], alpha=value[3])
-        raise ValueError(f"Un tuple de couleur doit avoir 3 ou 4 composantes, reçu {len(value)}")
-    raise TypeError(f"Couleur non convertible : {value!r}")
+        raise ValueError(f"A colour tuple needs 3 or 4 components, got {len(value)}")
+    raise TypeError(f"Cannot convert to a colour: {value!r}")

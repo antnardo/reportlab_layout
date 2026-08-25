@@ -1,4 +1,4 @@
-"""Curseur de flux."""
+"""The flow cursor."""
 
 import pytest
 

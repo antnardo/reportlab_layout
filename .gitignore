@@ -14,5 +14,5 @@ htmlcov/
 !docs/**/*.pdf
 logs/
 
-# Ancien pdf_maker, conservé en local le temps de la relecture.
+# The old pdf_maker, kept locally while the migration is reviewed.
 legacy/

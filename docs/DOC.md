@@ -1,186 +1,184 @@
-# Référence
+# Reference
 
-## Sommaire
+## Contents
 
-- [Les deux repères](#les-deux-repères)
-- [Créer un document](#créer-un-document)
-- [Le curseur](#le-curseur)
-- [Les trois modes de placement](#les-trois-modes-de-placement)
-- [Poser des flowables](#poser-des-flowables)
-- [Tracer du texte](#tracer-du-texte)
-- [Métriques de police](#métriques-de-police)
-- [Formes](#formes)
+- [The two coordinate systems](#the-two-coordinate-systems)
+- [Creating a document](#creating-a-document)
+- [The cursor](#the-cursor)
+- [The three placement modes](#the-three-placement-modes)
+- [Laying down flowables](#laying-down-flowables)
+- [Drawing text](#drawing-text)
+- [Font metrics](#font-metrics)
+- [Shapes](#shapes)
 - [Images](#images)
 - [Styles](#styles)
-- [En-tête et pied de page](#en-tête-et-pied-de-page)
+- [Header and footer](#header-and-footer)
 - [Pagination](#pagination)
 - [Frames](#frames)
-- [Numérotation « page x sur y »](#numérotation--page-x-sur-y-)
-- [Mise au point](#mise-au-point)
-- [Migration depuis `pdf_maker`](#migration-depuis-pdf_maker)
+- [Page "x of y" numbering](#page-x-of-y-numbering)
+- [Debugging a layout](#debugging-a-layout)
+- [Migrating from `pdf_maker`](#migrating-from-pdf_maker)
 
-## Les deux repères
+## The two coordinate systems
 
-Deux systèmes de coordonnées coexistent, et les confondre est la première source
-de bugs de mise en page.
+Two coordinate systems live side by side, and confusing them is the first cause
+of layout bugs.
 
-| | Origine | Sens | Unité | Où |
+| | Origin | Direction | Unit | Where |
 | --- | --- | --- | --- | --- |
-| **canvas** | bas-gauche | `y` monte | points | `draw_string`, `draw_rect`, `absolute=True`, toute `Box` |
-| **profondeur** | haut de page | `depth` descend | points | `doc.cursor.depth` |
-| **coordonnées d'appel** | marge gauche / haut | `y` descend | `unit` (mm) | `x=` et `y=` des méthodes `draw_*` sans `absolute` |
+| **canvas** | bottom left | `y` grows up | points | `draw_string`, `draw_rect`, `absolute=True`, every `Box` |
+| **depth** | top of page | `depth` grows down | points | `doc.cursor.depth` |
+| **call coordinates** | left / top margin | `y` grows down | `unit` (mm) | the `x=` and `y=` of `draw_*` without `absolute` |
 
-`PageGeometry` est le seul endroit qui convertit :
+`PageGeometry` is the only place that converts:
 
 ```python
-doc.geometry.depth_to_y(depth)   # profondeur -> ordonnée canvas
-doc.geometry.y_to_depth(y)       # ordonnée canvas -> profondeur
+doc.geometry.depth_to_y(depth)   # depth -> canvas ordinate
+doc.geometry.y_to_depth(y)       # canvas ordinate -> depth
 ```
 
-Un point PostScript vaut 1/72 de pouce. `reportlab.lib.units` fournit `mm`,
-`cm`, `inch`, `pica`.
+A PostScript point is 1/72 inch. `reportlab.lib.units` provides `mm`, `cm`,
+`inch`, `pica`.
 
-## Créer un document
+## Creating a document
 
 ```python
 from reportlab_layout import PDFMaker
 
 doc = PDFMaker(
-    "sortie.pdf",
-    pagesize="A4",          # nom reportlab ou couple (largeur, hauteur) en points
+    "output.pdf",
+    pagesize="A4",          # a reportlab name, or a (width, height) pair in points
     landscape=False,
-    unit=mm,                # unité des x= et y= passés aux méthodes draw_*
-    left=15, right=15, top=15, bottom=15,   # marges, exprimées en unit
-    font_size=12,           # corps de référence pour add_space()
-    stylesheet=None,        # None -> feuille partagée STYLES
+    unit=mm,                # the unit of the x= and y= passed to draw_* methods
+    left=15, right=15, top=15, bottom=15,   # margins, expressed in unit
+    font_size=12,           # reference type size, used by add_space()
+    stylesheet=None,        # None -> the shared STYLES sheet
     auto_page_break=False,
     show_boundaries=False,
 )
 ```
 
-Le document est aussi un gestionnaire de contexte : la sortie n'est écrite que
-si le bloc se termine sans exception.
+The document is also a context manager: the output is only written if the block
+finishes without an exception.
 
 ```python
-with PDFMaker("sortie.pdf") as doc:
-    doc.draw_paragraph("Bonjour")
+with PDFMaker("output.pdf") as doc:
+    doc.draw_paragraph("Hello")
 ```
 
-Sinon, appeler `doc.save()` explicitement. `save()` dessine l'en-tête et le pied
-de la dernière page avant d'écrire.
+Otherwise call `doc.save()` yourself. `save()` draws the last page's header and
+footer before writing.
 
-### Attributs de géométrie
+### Geometry attributes
 
-Posés à la construction, en points, dans le repère canvas :
+Set at construction, in points, in canvas coordinates:
 
 `width` `height` `left` `right` `top` `bottom` `content_width` `content_height`
 `x_left` `x_right` `y_top` `y_bottom` `bottom_depth`
 
-Ce sont des instantanés modifiables, pas des propriétés : une sous-classe peut
-les ajuster en cours de route. La géométrie de référence reste dans
-`doc.geometry`.
+These are mutable snapshots, not properties: a subclass can adjust them as it
+goes. The reference geometry stays in `doc.geometry`.
 
-## Le curseur
+## The cursor
 
 ```python
-doc.cursor.depth         # profondeur courante, en points ; modifiable
-doc.cursor_y             # la même position en ordonnée canvas
+doc.cursor.depth         # current depth, in points; writable
+doc.cursor_y             # the same position as a canvas ordinate
 doc.cursor_point         # (x_left, cursor_y)
-doc.remaining_height     # hauteur restante avant la marge basse
-doc.cursor.fits(h)       # un élément de hauteur h tient-il encore ?
+doc.remaining_height     # height left before the bottom margin
+doc.cursor.fits(h)       # does an element h points tall still fit?
 
-doc.advance(30)          # descendre de 30 points
-doc.add_space()          # descendre d'un corps de référence
-doc.add_space(2)         # de deux corps
-doc.reset_cursor()       # revenir en haut de la zone de contenu
+doc.advance(30)          # move down 30 points
+doc.add_space()          # move down one reference type size
+doc.add_space(2)         # two of them
+doc.reset_cursor()       # back to the top of the content area
 ```
 
-## Les trois modes de placement
+## The three placement modes
 
-Toutes les méthodes `draw_*` qui posent un flowable acceptent les mêmes
-mots-clés, et se comportent selon ce qu'on leur donne.
+Every `draw_*` method that lays down a flowable takes the same keywords, and
+behaves according to what it is given.
 
-**Flux** — ni `x` ni `y`. L'élément se pose sous le précédent, le curseur descend
-de sa hauteur augmentée des espacements du flowable.
+**Flow** — neither `x` nor `y`. The element lands under the previous one; the
+cursor moves down by its height plus the flowable's own spacing.
 
 ```python
-doc.draw_paragraph("Se pose à la position courante.")
+doc.draw_paragraph("Lands wherever the cursor is.")
 ```
 
-**Relatif** — `x` et/ou `y` donnés, en `unit`. `y` est une profondeur depuis le
-haut de la page. Le curseur **ne bouge pas**.
+**Relative** — `x` and/or `y` given, in `unit`. `y` is a depth from the top of
+the page. The cursor **does not move**.
 
 ```python
-doc.draw_paragraph("À 40 mm du haut.", x=20, y=40)
+doc.draw_paragraph("40 mm down from the top.", x=20, y=40)
 ```
 
-**Absolu** — `absolute=True`. `x` et `y` sont des coordonnées canvas en
-**points**. Le curseur ne bouge pas. `valign` dit ce que désigne `y` :
+**Absolute** — `absolute=True`. `x` and `y` are canvas coordinates in
+**points**. The cursor does not move. `valign` says what `y` refers to:
 
 ```python
-doc.draw_paragraph("Bas du bloc sur y.",    x=100, y=200, width=200, absolute=True)
-doc.draw_paragraph("Milieu du bloc sur y.", x=100, y=200, width=200, absolute=True, valign="middle")
-doc.draw_paragraph("Sommet du bloc sur y.", x=100, y=200, width=200, absolute=True, valign="top")
+doc.draw_paragraph("Bottom of the block on y.", x=100, y=200, width=200, absolute=True)
+doc.draw_paragraph("Middle of the block on y.", x=100, y=200, width=200, absolute=True, valign="middle")
+doc.draw_paragraph("Top of the block on y.",    x=100, y=200, width=200, absolute=True, valign="top")
 ```
 
-## Poser des flowables
+## Laying down flowables
 
 ```python
-doc.draw(flowable, **kwargs)                      # n'importe quel flowable reportlab
-doc.draw_paragraph(texte, style=None, **kwargs)
+doc.draw(flowable, **kwargs)                      # any reportlab flowable
+doc.draw_paragraph(text, style=None, **kwargs)
 doc.draw_table(data, col_widths=None, row_heights=None, style=None, **kwargs)
 doc.draw_image(spec, width=None, height=None, scale=None, **kwargs)
 doc.draw_centered_line(y=None, wscale=1.0, stroke=None, line_width=0.5)
 ```
 
-Mots-clés communs de `draw` :
+The keywords `draw` shares with all of them:
 
-| Mot-clé | Effet |
+| Keyword | Effect |
 | --- | --- |
-| `x`, `y` | position, en `unit` (ou en points si `absolute`) |
-| `width`, `height` | encombrement proposé au flowable pour son retour à la ligne |
-| `before` | espace ajouté avant, en `unit` |
-| `absolute` | coordonnées canvas brutes |
-| `halign` | `"left"`, `"center"`, `"right"` — combiné à `wscale` |
-| `valign` | `"bottom"`, `"middle"`, `"top"` — **en mode absolu seulement** |
-| `wscale` | fraction de la largeur de contenu occupée par le bloc |
-| `page_break` | `None` suit `auto_page_break` ; `True`/`False` forcent |
-| `show_boundary` | trace la boîte de l'élément |
+| `x`, `y` | position, in `unit` (or in points with `absolute`) |
+| `width`, `height` | the space offered to the flowable for its wrapping |
+| `before` | space added before, in `unit` |
+| `absolute` | raw canvas coordinates |
+| `halign` | `"left"`, `"center"`, `"right"` — works with `wscale` |
+| `valign` | `"bottom"`, `"middle"`, `"top"` — **in absolute mode only** |
+| `wscale` | fraction of the content width the block occupies |
+| `page_break` | `None` follows `auto_page_break`; `True`/`False` force it |
+| `show_boundary` | outline the element's box |
 
-Chaque appel rend une `Box` :
+Every call returns a `Box`:
 
 ```python
-box = doc.draw_paragraph("Bonjour")
-x, y, width, height = box            # se déballe comme un quadruplet
-box.right, box.top, box.center       # coin bas-gauche + commodités
+box = doc.draw_paragraph("Hello")
+x, y, width, height = box            # unpacks as a plain 4-tuple
+box.right, box.top, box.center       # bottom-left corner plus conveniences
 ```
 
-`wscale` et `halign` vont ensemble : `wscale=0.5, halign="right"` pose un bloc
-de demi-largeur contre la marge droite.
+`wscale` and `halign` go together: `wscale=0.5, halign="right"` lays a
+half-width block against the right margin.
 
-### Fabriques
+### Factories
 
-Pour construire un flowable sans le poser — utile pour un en-tête, un pied, ou
-une cellule de tableau :
+To build a flowable without laying it down — useful for a header, a footer, or a
+table cell:
 
 ```python
-doc.make_paragraph(texte, style=None)
-doc.make_spacer(space=1)                 # en corps de référence
+doc.make_paragraph(text, style=None)
+doc.make_spacer(space=1)                 # in reference type sizes
 doc.make_table(data, col_widths=None, row_heights=None)
 doc.make_image(spec, width=None, height=None, scale=None)
 ```
 
-### Tableaux
+### Tables
 
-`col_widths` non fourni répartit la largeur de contenu à parts égales ; un
-scalaire s'applique à toutes les colonnes ; une liste les fixe une à une.
+Without `col_widths` the content width is split evenly; a scalar applies to
+every column; a list sets them one by one.
 
-`style` accepte une suite de commandes reportlab, ou un `TableStyle` déjà
-construit :
+`style` takes a sequence of reportlab commands, or a `TableStyle` already built:
 
 ```python
 doc.draw_table(
-    [["Nom", "Note"], ["HOPPER", "17"]],
+    [["Name", "Mark"], ["HOPPER", "17"]],
     col_widths=[40 * mm, doc.content_width - 40 * mm],
     style=[
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -190,100 +188,101 @@ doc.draw_table(
 )
 ```
 
-Pour du texte qui doit se replier dans une cellule, mettre un `Paragraph` plutôt
-qu'une chaîne :
+For text that has to wrap inside a cell, put a `Paragraph` there rather than a
+string:
 
 ```python
-cellules = [[doc.make_paragraph(c, "Small") for c in ligne] for ligne in data]
+cells = [[doc.make_paragraph(c, "Small") for c in row] for row in data]
 ```
 
-## Tracer du texte
+## Drawing text
 
-Une seule méthode, en coordonnées canvas et en points.
+One method, in canvas coordinates and points.
 
 ```python
 doc.draw_string(
-    texte, x, y,
-    style=None,        # nom de style, ParagraphStyle, ou None pour Normal
-    scale=1.0,         # multiplie le corps du style
-    color=None,        # triplet, "#rrggbb", nom CSS, ou Color reportlab
+    text, x, y,
+    style=None,        # a style name, a ParagraphStyle, or None for Normal
+    scale=1.0,         # multiplies the style's type size
+    color=None,        # a tuple, "#rrggbb", a CSS name, or a reportlab Color
     halign="left",     # left | center | right
     valign="baseline", # baseline | middle | cap | top | bottom
-    angle=0,           # rotation autour du point d'ancrage, sens trigonométrique
-    dx=0, dy=0,        # décalage après ancrage, pour les retouches optiques
+    angle=0,           # rotation about the anchor, counterclockwise
+    dx=0, dy=0,        # nudge after anchoring, for optical corrections
 )
 ```
 
-Ancrages verticaux, `y` désignant :
+Vertical anchors, `y` meaning:
 
-| `valign` | ce que `y` désigne |
+| `valign` | what `y` refers to |
 | --- | --- |
-| `baseline` | la ligne de base — le comportement de `canvas.drawString` |
-| `middle` | le milieu de la boîte em, place des jambages comprise |
-| `cap` | le milieu de la boîte de capitale — **le centrage des étiquettes** |
-| `top` | le sommet de la boîte em |
-| `bottom` | le bas de la boîte em |
+| `baseline` | the baseline — what `canvas.drawString` does |
+| `middle` | the middle of the em box, descender room included |
+| `cap` | the middle of the cap box — **the anchor for labels** |
+| `top` | the top of the em box |
+| `bottom` | the bottom of the em box |
 
-### `middle` ou `cap` ?
+### `middle` or `cap`?
 
-Les deux sont exacts, ils ne centrent simplement pas la même chose.
+Both are exact. They simply centre different things.
 
-`middle` centre la **boîte em**, qui réserve la place des jambages même quand la
-chaîne n'en a pas. Sur un libellé comme `DS 3`, l'encre se retrouve alors haute
-d'environ 10 % du corps.
+`middle` centres the **em box**, which reserves room for descenders even when
+the string has none. On a label like `Exam 3` the ink then sits high by about
+10% of the type size.
 
-`cap` centre la **boîte de capitale**, du pied à la hauteur des majuscules. Sur
-des étiquettes courtes, l'encre tombe au milieu de la case à moins d'un
-vingtième de point ; et comme le repère ne dépend pas des glyphes présents, une
-rangée d'étiquettes partage la même ligne de base, qu'elles aient ou non des
-jambages. C'est ce qu'il faut pour une cellule de tableau, un bandeau, un badge.
+`cap` centres the **cap box**, from the baseline to the height of the capitals.
+On short labels the ink lands within a tenth of a point of the middle of its
+box; and because the reference does not depend on which glyphs are present, a
+row of labels shares one baseline whether or not they have descenders. That is
+what a table cell, a banner or a badge wants.
 
-Mesures sur les cellules d'un calendrier réel, écart entre le milieu de l'encre
-et le milieu de la case :
+Ink-centre error measured on Helvetica labels in a 16 pt row:
 
-| Étiquette | corps | `middle` | `cap` |
+| Label | size | `middle` | `cap` |
 | --- | --- | --- | --- |
-| `DS 3` | 9,5 pt | +0,98 pt | +0,00 pt |
-| `TP ITC` | 8,5 pt | +0,90 pt | +0,02 pt |
-| `DS Fr1` | 6,5 pt | +0,66 pt | +0,00 pt |
-| `Cours ITC` | 8 pt | +0,83 pt | +0,01 pt |
-| `Septembre` | 12 pt | +0,10 pt | −1,14 pt |
+| `Exam 3` | 9.5 pt | +0.89 pt | −0.09 pt |
+| `Lab work` | 8.5 pt | +0.81 pt | −0.07 pt |
+| `Test A1` | 6.5 pt | +0.61 pt | −0.05 pt |
+| `Room 204` | 8 pt | +0.75 pt | −0.07 pt |
+| `September` | 12 pt | +0.10 pt | −1.14 pt |
 
-![Ancienne formule, boîte em, boîte de capitale](img/ancrage-cap.png)
+![Old formula, em box, cap box](img/centering.png)
 
-Le filet rouge marque le milieu exact de la case. En haut l'ancienne formule
-avec sa retouche réglée à l'œil, au milieu `middle`, en bas `cap`.
+The red rule marks the exact middle of each box. Left, the formula this package
+used to get wrong; middle, `valign="middle"`; right, `valign="cap"`. The bottom
+row is drawn at 0.6 scale, which is also where the old code's horizontal
+centring drifts.
 
-`Septembre` illustre la limite : son `p` descend et tire la boîte d'encre vers
-le bas. C'est voulu — sur une rangée de bandeaux mensuels, on veut que `Mars` et
-`Septembre` partagent une ligne de base, pas que chacun centre sa propre encre.
+`September` shows the limit: its `p` descends and drags the ink box down. That
+is intended — across a row of month banners you want `March` and `September` to
+share a baseline, not each to centre its own ink.
 
-Un `dy` constant sur un `draw_string` est presque toujours le symptôme d'un
-mauvais ancrage : il ne suit ni le corps, ni l'échelle.
+A constant `dy` on a `draw_string` is almost always the symptom of a wrong
+anchor: it tracks neither the type size nor the scale.
 
-Ces chiffres se remesurent avec
+These figures can be measured again with
+[`scripts/centering_proof.py`](../scripts/centering_proof.py) and
 [`scripts/cap_height_probe.py`](../scripts/cap_height_probe.py).
 
-`draw_string` ne replie pas le texte. Pour du texte qui doit se mettre en forme,
-passer par `draw_paragraph`.
+`draw_string` does not wrap. For text that has to be laid out, go through
+`draw_paragraph`.
 
-La rotation est propre : le canvas est sauvegardé, translaté au point
-d'ancrage, pivoté, puis restauré. `angle=90` donne un texte lisible de bas en
-haut.
+Rotation is clean: the canvas is saved, translated to the anchor, rotated, then
+restored. `angle=90` reads bottom to top.
 
 ```python
-doc.draw_string("Semaine 12", x, y, angle=90, halign="center", valign="middle")
+doc.draw_string("Week 12", x, y, angle=90, halign="center", valign="cap")
 ```
 
-Pour dessiner soi-même avec le canvas, `apply_style` arme la police et la
-couleur et rend les métriques :
+To draw with the canvas yourself, `apply_style` arms the font and colour and
+returns the metrics:
 
 ```python
 metrics = doc.apply_style("Heading2", scale=0.8, color="#333333")
-doc.canvas.drawString(x, y, "tracé à la main")
+doc.canvas.drawString(x, y, "drawn by hand")
 ```
 
-## Métriques de police
+## Font metrics
 
 ```python
 from reportlab_layout import TextMetrics, string_width, font_height, baseline_offset
@@ -292,33 +291,33 @@ m = TextMetrics(style, scale=0.5)
 m.font_name, m.font_size, m.leading
 m.ascent      # > 0
 m.descent     # < 0
-m.height      # ascent - descent, hauteur de la boîte em
-m.cap_height  # hauteur des majuscules au-dessus de la ligne de base
-m.baseline_offset            # (ascent + descent) / 2, décalage de centrage em
-m.cap_offset                 # cap_height / 2, décalage de centrage capitale
-m.width("Bonjour")
-m.baseline(y, "middle")      # ligne de base pour un ancrage donné
-m.left_edge(x, "Bonjour", "center")
+m.height      # ascent - descent, the height of the em box
+m.cap_height  # height of the capitals above the baseline
+m.baseline_offset            # (ascent + descent) / 2, the em-centring offset
+m.cap_offset                 # cap_height / 2, the cap-centring offset
+m.width("Hello")
+m.baseline(y, "middle")      # baseline for a given anchor
+m.left_edge(x, "Hello", "center")
 ```
 
-Toutes les métriques tiennent compte de `scale`. C'est le point : mesurer au
-corps nominal puis dessiner à `scale=0.5` produit un centrage faux d'un facteur
-deux, horizontalement comme verticalement.
+Every metric accounts for `scale`. That is the point: measuring at the nominal
+size and then drawing at `scale=0.5` gets the centring wrong by a factor of two,
+horizontally as much as vertically.
 
-`cap_height` mérite un mot : reportlab ne l'expose pas pour les quatorze polices
-PostScript standard, il ne donne que l'ascendante — qui vaut la hauteur de
-capitale chez Helvetica, mais la dépasse de 3 % chez Times et de 12 % chez
-Courier. Le paquet embarque donc la table publiée dans les fichiers AFM d'Adobe
-(`STANDARD_CAP_HEIGHTS`), lit `face.capHeight` quand la fonte la déclare
-(TrueType), et se rabat sur l'ascendante en dernier recours.
+`cap_height` deserves a note: reportlab does not expose it for the fourteen
+standard PostScript fonts, only the ascent — which equals the cap height for
+Helvetica, but overshoots it by 3% for Times and 12% for Courier. So the package
+carries the table published in Adobe's AFM files (`STANDARD_CAP_HEIGHTS`), reads
+`face.capHeight` when the font declares one (TrueType), and falls back to the
+ascent as a last resort.
 
-`doc.metrics(style, scale)` rend le même objet en résolvant le style dans la
-feuille du document.
+`doc.metrics(style, scale)` returns the same object, resolving the style against
+the document's stylesheet.
 
-## Formes
+## Shapes
 
-Coordonnées canvas, en points. Chaque tracé rend une `Box` et ne laisse aucun
-état sur le canvas.
+Canvas coordinates, in points. Every call returns a `Box` and leaves no state
+behind on the canvas.
 
 ```python
 doc.draw_line(x1, y1, x2, y2, stroke="black", line_width=0.5)
@@ -326,27 +325,26 @@ doc.draw_rect(x, y, w, h, fill=None, stroke="black", line_width=0.5)
 doc.draw_round_rect(x, y, w, h, radius=5, fill=None, stroke="black", line_width=0.5)
 ```
 
-`fill=None` laisse l'intérieur vide ; `stroke=None` supprime le contour. Les
-couleurs acceptent un triplet ou quadruplet `0..1`, une chaîne `"#rrggbb"`, un
-nom CSS, ou un `Color` reportlab. `radius` est écrêté à la moitié du plus petit
-côté.
+`fill=None` leaves the inside empty; `stroke=None` drops the outline. Colours
+accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
+reportlab `Color`. `radius` is clamped to half the shorter side.
 
 ## Images
 
 ```python
 from reportlab_layout import image_spec, load_image
 
-spec = image_spec("logo.png")        # lit les dimensions en pixels une fois
+spec = image_spec("logo.png")        # reads the pixel size once
 spec.width, spec.height, spec.aspect
-spec.scaled(width=50 * mm)           # -> (largeur, hauteur) en points
+spec.scaled(width=50 * mm)           # -> (width, height) in points
 
-doc.draw_image(spec, width=30 * mm)  # rapport d'aspect conservé
+doc.draw_image(spec, width=30 * mm)  # aspect ratio preserved
 doc.draw_image("logo.png", height=20 * mm)
 doc.draw_image(spec, scale=0.5)
 ```
 
-Donner `width` **et** `height` force le rapport, ce qui est parfois voulu.
-Ne rien donner lève une `ValueError` plutôt que de deviner.
+Giving `width` **and** `height` forces the ratio, which is sometimes what you
+want. Giving none of them raises `ValueError` rather than guessing.
 
 ## Styles
 
@@ -354,100 +352,99 @@ Ne rien donner lève une `ValueError` plutôt que de deviner.
 from reportlab_layout import make_stylesheet, add_style, STYLES
 ```
 
-`make_stylesheet()` rend une feuille **neuve** à chaque appel : celle de
-reportlab, augmentée de `Left`, `Right`, `Centered`, `Justify`, `Small`,
-`Footer`, `Heading1 Centered`, `Heading1 Left`.
+`make_stylesheet()` returns a **fresh** sheet each call: reportlab's, plus
+`Left`, `Right`, `Centered`, `Justify`, `Small`, `Footer`, `Heading1 Centered`
+and `Heading1 Left`.
 
-`STYLES` est une feuille partagée par le module. Pratique dans un script,
-dangereux dans une bibliothèque : deux modules qui y ajoutent le même nom se
-marchent dessus. Dès qu'un document a des styles à lui :
+`STYLES` is a module-level shared sheet. Handy in a script, dangerous in a
+library: two modules adding the same name to it collide. As soon as a document
+has styles of its own:
 
 ```python
 styles = make_stylesheet()
-add_style(styles, "Titre", parent="Heading1", fontSize=24, leading=28)
-add_style(styles, "Mention", parent="Small", textColor="#555555")
+add_style(styles, "Banner", parent="Heading1", fontSize=24, leading=28)
+add_style(styles, "Fineprint", parent="Small", textColor="#555555")
 
-doc = PDFMaker("sortie.pdf", stylesheet=styles)
-doc.draw_paragraph("Titre du document", "Titre")
+doc = PDFMaker("output.pdf", stylesheet=styles)
+doc.draw_paragraph("Document title", "Banner")
 ```
 
-`add_style` remplace un style déjà défini au lieu de lever `KeyError` — un
-module réimporté ne casse plus. `replace=False` restaure le comportement de
-reportlab.
+`add_style` replaces an existing style rather than raising `KeyError` — a
+re-imported module no longer breaks. `replace=False` restores reportlab's
+behaviour.
 
-Partout où un style est attendu, on peut donner son nom, un `ParagraphStyle`, ou
-`None` pour `Normal`.
+Anywhere a style is expected you may give its name, a `ParagraphStyle`, or
+`None` for `Normal`.
 
-## En-tête et pied de page
+## Header and footer
 
-Redessinés sur chaque page, sans toucher au curseur.
+Redrawn on every page, without touching the cursor.
 
 ```python
-doc.set_footer(doc.make_paragraph("Version du 25/08/2026", "Right"))
-doc.set_header([logo, doc.make_paragraph("Établissement X", "Centered")])
+doc.set_footer(doc.make_paragraph("Revision of 25 August 2026", "Right"))
+doc.set_header([logo, doc.make_paragraph("Acme Ltd", "Centered")])
 ```
 
-Le pied se place sur la limite basse de la zone de contenu, l'en-tête sur la
-limite haute. Ils sont dessinés par `new_page()` et par `save()`.
+The footer sits on the bottom edge of the content area, the header on the top
+edge. Both are drawn by `new_page()` and by `save()`.
 
-Les attributs `doc.header` et `doc.footer` sont des listes ; on peut les
-affecter directement.
+`doc.header` and `doc.footer` are plain lists; you may assign to them directly.
 
 ## Pagination
 
 ```python
-doc.new_page()      # dessine en-tête et pied, tourne la page, remet le curseur en haut
-doc.page            # numéro de la page courante
+doc.new_page()      # draws header and footer, turns the page, resets the cursor
+doc.page            # current page number
 ```
 
-Avec `auto_page_break=True`, un élément qui déborderait sous la marge basse
-déclenche une nouvelle page avant d'être posé.
+With `auto_page_break=True`, an element that would overflow the bottom margin
+starts a new page before it is laid down.
 
 ```python
-doc = PDFMaker("sortie.pdf", auto_page_break=True)
+doc = PDFMaker("output.pdf", auto_page_break=True)
 ```
 
-`page_break=False` sur un appel désactive le saut pour cet élément ;
-`page_break=True` l'active même si le document ne l'a pas demandé.
+`page_break=False` on one call disables the break for that element;
+`page_break=True` enables it even if the document did not ask for it.
 
-Le saut n'a lieu qu'en mode flux : un élément placé à une position explicite est
-posé où on l'a dit.
+The break only happens in flow mode: an element given an explicit position lands
+where you said.
 
 ## Frames
 
-Un frame est une boîte de hauteur fixe que reportlab remplit tout seul, en
-gérant le retour à la ligne, et qui s'arrête quand c'est plein.
+A frame is a fixed-height box reportlab fills on its own, handling the wrapping,
+and stops filling once it is full.
 
 ```python
 doc.new_frame(height=60, wscale=0.5, show_boundary=True)
-reste = doc.frame_paragraph("Un texte qui se replie dans la boîte.")
+leftover = doc.frame_paragraph("Some text that wraps inside the box.")
 doc.frame_image("logo.png", width=30 * mm)
 doc.frame_space(1)
 ```
 
-Ce qui n'a pas tenu est **rendu** par l'appel et signalé dans les journaux, au
-lieu de disparaître en silence. `new_frame` fait descendre le curseur de la
-hauteur du frame.
+Whatever did not fit is **returned** by the call and reported in the logs,
+rather than vanishing silently. `new_frame` moves the cursor down by the frame's
+height.
 
-`doc.draw_frame(story, space=0)` écrit une liste de flowables d'un coup.
+`doc.draw_frame(story, space=0)` writes a list of flowables in one go.
 
-## Numérotation « page x sur y »
+## Page "x of y" numbering
 
-Le nombre total de pages n'étant connu qu'à la fin, il faut un canvas qui
-mémorise les pages et les rejoue.
+Since the page count is only known at the end, you need a canvas that records
+the pages and replays them.
 
 ```python
 from reportlab.platypus import SimpleDocTemplate
 from reportlab_layout import NumberedCanvas
 
-SimpleDocTemplate("sortie.pdf").build(story, canvasmaker=NumberedCanvas)
+SimpleDocTemplate("output.pdf").build(story, canvasmaker=NumberedCanvas)
 ```
 
-Il fonctionne aussi comme canvas autonome, sans `DocTemplate` — c'est la
-différence avec la recette qui circule, laquelle perd silencieusement la
-dernière page dans ce cas.
+It also works as a standalone canvas, with no `DocTemplate` — that is the
+difference from the recipe that circulates, which silently loses the last page
+in that case.
 
-Pour changer la présentation :
+To change how it looks:
 
 ```python
 class Folio(NumberedCanvas):
@@ -456,40 +453,40 @@ class Folio(NumberedCanvas):
     folio_label = staticmethod(lambda page, total: f"— {page} / {total} —")
 ```
 
-Ou surcharger `draw_folio(page, total)` pour un rendu complet.
+Or override `draw_folio(page, total)` for full control.
 
-## Mise au point
+## Debugging a layout
 
-`show_boundaries=True` à la construction, ou `show_boundary=True` sur un appel,
-trace la boîte de chaque élément posé.
+`show_boundaries=True` at construction, or `show_boundary=True` on one call,
+outlines the box of every element laid down.
 
-Le paquet journalise par `logging`, sans jamais imprimer :
+The package logs through `logging` and never prints:
 
 ```python
 import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
-`reportlab_layout.document` émet les changements de page et les créations de
-frame en `DEBUG` ; `reportlab_layout.frames` signale les débordements en
-`WARNING`.
+`reportlab_layout.document` emits page changes and frame creations at `DEBUG`;
+`reportlab_layout.frames` reports overflow at `WARNING`.
 
-## Migration depuis `pdf_maker`
+## Migrating from `pdf_maker`
 
-L'API est passée en `snake_case` et plusieurs signatures ont changé.
+This package grew out of a private module called `pdf_maker`. If you are coming
+from it, the API moved to `snake_case` and several signatures changed.
 
-| Avant | Après |
+| Before | After |
 | --- | --- |
 | `from pdf_maker import …` | `from reportlab_layout import …` |
-| `PDFMaker(f, fontsize=, verbose=, showboundaries=, autobreak=)` | `PDFMaker(f, font_size=, show_boundaries=, auto_page_break=)` (plus de `verbose` : `logging`) |
+| `PDFMaker(f, fontsize=, verbose=, showboundaries=, autobreak=)` | `PDFMaker(f, font_size=, show_boundaries=, auto_page_break=)` (no more `verbose`: `logging`) |
 | `self.c` | `self.canvas` |
-| `self.cursor` (flottant) | `self.cursor.depth` |
+| `self.cursor` (a float) | `self.cursor.depth` |
 | `self.coord()` | `self.cursor_point`, `self.cursor_y` |
 | `activewidth`, `activeheight` | `content_width`, `content_height` |
 | `activebottom`, `bottomheight` | `bottom_depth`, `remaining_height` |
 | `self.foot`, `self.head` | `self.footer`, `self.header` |
 | `self.space` | `self.default_space` |
-| `self.today` | supprimé — la mise en forme de date relève de l'appelant |
+| `self.today` | gone — formatting a date is the caller's business |
 | `savePDF()` | `save()` |
 | `newPage()`, `addSpace()`, `addcursor(h)` | `new_page()`, `add_space()`, `advance(h)` |
 | `setMeta()` | `set_metadata()` |
@@ -498,21 +495,21 @@ L'API est passée en `snake_case` et plusieurs signatures ont changé.
 | `drawCenteredLine`, `drawRect`, `drawRectRounded` | `draw_centered_line`, `draw_rect`, `draw_round_rect` |
 | `set_style(n, size=, rgb=)` | `apply_style(n, scale=, color=)` |
 | `drawStringCenterH(x, y, s, …)` | `draw_string(s, x, y, halign="center")` |
-| `drawStringCenterHV(x, y, s, …)` | `draw_string(s, x, y, halign="center", valign="middle")` |
-| `drawStringCenterHVVertical(x, y, s, …)` | `draw_string(s, x, y, halign="center", valign="middle", angle=90)` |
-| `drawStringLeftCenterV(x, y, s, …)` | `draw_string(s, x, y, valign="middle")` |
+| `drawStringCenterHV(x, y, s, …)` | `draw_string(s, x, y, halign="center", valign="cap")` |
+| `drawStringCenterHVVertical(x, y, s, …)` | `draw_string(s, x, y, halign="center", valign="cap", angle=90)` |
+| `drawStringLeftCenterV(x, y, s, …)` | `draw_string(s, x, y, valign="cap")` |
 | `topage=True` | `absolute=True` |
 | `w=`, `h=`, `colwidth=` | `width=`, `height=`, `col_widths=` |
 | `fillRGB=`, `strokeRGB=`, `lw=`, `round=` | `fill=`, `stroke=`, `line_width=`, `radius=` |
 | `imspecs()`, `get_image(…, largeur=)` | `image_spec()`, `load_image(…, width=)` |
-| `drawParagraph` rendait `(p, (x, y, w, h))` | toutes les méthodes rendent une `Box` |
-| `styles` global partagé | `make_stylesheet()`, passé par `stylesheet=` |
+| `drawParagraph` returned `(p, (x, y, w, h))` | every method returns a `Box` |
+| the shared global `styles` | `make_stylesheet()`, passed via `stylesheet=` |
 
-Attention aux deux changements qui ne se voient pas à la relecture :
+Two changes will not show up when re-reading the code:
 
-- **Le texte centré verticalement remonte** d'environ 20 % du corps. C'est la
-  correction ; les positions ajustées à la main pour compenser l'ancien décalage
-  sont à revoir.
-- **`before=` est désormais en `unit`** partout. Il était en `unit` pour le
-  positionnement et en points pour l'avance du curseur, ce qui déplaçait les
-  éléments suivants.
+- **Vertically centred text moves up** by about 20% of the type size. That is
+  the correction; any positions hand-tuned to compensate for the old offset need
+  revisiting. Short labels should move to `valign="cap"` and lose their `dy`.
+- **`before=` is now in `unit`** everywhere. It used to be in `unit` for
+  positioning and in points for advancing the cursor, which shifted everything
+  that followed.

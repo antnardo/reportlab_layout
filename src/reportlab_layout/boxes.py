@@ -1,4 +1,4 @@
-"""Rectangle rendu par une opération de tracé."""
+"""The rectangle a drawing operation ended up covering."""
 
 from typing import NamedTuple
 
@@ -6,10 +6,10 @@ __all__ = ["Box"]
 
 
 class Box(NamedTuple):
-    """Rectangle effectivement occupé par un élément dessiné, repère canvas.
+    """The rectangle an element actually occupies, in canvas coordinates.
 
-    Se déballe comme un quadruplet ``(x, y, width, height)``. ``x, y`` est le
-    coin **bas-gauche**, comme partout dans reportlab.
+    Unpacks as a plain ``(x, y, width, height)`` tuple. ``x, y`` is the
+    **bottom-left** corner, as everywhere else in reportlab.
     """
 
     x: float

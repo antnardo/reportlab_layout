@@ -1,4 +1,4 @@
-"""Lecture et mise à l'échelle des images."""
+"""Reading and scaling images."""
 
 import pytest
 
@@ -26,11 +26,11 @@ class TestImageSpec:
         assert image_spec(picture).scaled(width=30, height=90) == pytest.approx((30, 90))
 
     def test_scale_with_width_is_rejected(self, picture):
-        with pytest.raises(ValueError, match="exclusif"):
+        with pytest.raises(ValueError, match="exclusive"):
             image_spec(picture).scaled(width=10, scale=2)
 
     def test_no_constraint_is_rejected(self, picture):
-        with pytest.raises(ValueError, match="width, height ou scale"):
+        with pytest.raises(ValueError, match="width, height or scale"):
             image_spec(picture).scaled()
 
 

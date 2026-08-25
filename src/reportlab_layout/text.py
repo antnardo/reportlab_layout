@@ -1,13 +1,13 @@
-"""Tracé de chaînes simples, ancrées et éventuellement pivotées.
+"""Drawing plain strings, anchored and optionally rotated.
 
-Une seule méthode, :meth:`TextPainter.draw`, remplace la demi-douzaine de
-variantes ``drawStringCenterH`` / ``…CenterHV`` / ``…LeftCenterV`` que l'on
-finit toujours par écrire. L'ancrage est décrit par deux mots — ``halign`` et
-``valign`` — et le calcul de ligne de base est délégué à
-:class:`~reportlab_layout.metrics.TextMetrics`, qui tient compte de l'échelle.
+A single method, :meth:`TextPainter.draw`, replaces the half-dozen
+``drawStringCenterH`` / ``...CenterHV`` / ``...LeftCenterV`` variants everyone
+ends up writing. The anchor is described by two words -- ``halign`` and
+``valign`` -- and working out the baseline is delegated to
+:class:`~reportlab_layout.metrics.TextMetrics`, which accounts for scale.
 
-Pour du texte qui doit se retourner à la ligne, utiliser un ``Paragraph`` et le
-placer avec ``PDFMaker.draw_paragraph`` : ici, la chaîne est tracée telle quelle.
+For text that needs to wrap, use a ``Paragraph`` and place it with
+``PDFMaker.draw_paragraph``: here the string is drawn as it comes.
 """
 
 from reportlab.lib.styles import StyleSheet1
@@ -22,14 +22,14 @@ __all__ = ["TextPainter"]
 
 
 class TextPainter:
-    """Dessine des chaînes de texte sur un canvas, avec ancrage explicite."""
+    """Draws text strings on a canvas, with an explicit anchor."""
 
     def __init__(self, canvas: Canvas, stylesheet: StyleSheet1 | None = None) -> None:
         self._canvas = canvas
         self._stylesheet = stylesheet
 
     def metrics(self, style: StyleLike, scale: float = 1.0) -> TextMetrics:
-        """Métriques du style demandé, à l'échelle demandée."""
+        """Metrics for the requested style, at the requested scale."""
         return TextMetrics(resolve_style(style, self._stylesheet), scale)
 
     def draw(
@@ -47,20 +47,19 @@ class TextPainter:
         dx: float = 0,
         dy: float = 0,
     ) -> Box:
-        """Trace ``text`` en ancrant le point ``(x, y)`` selon ``halign``/``valign``.
+        """Draw ``text``, anchoring point ``(x, y)`` per ``halign``/``valign``.
 
-        ``halign`` vaut ``"left"``, ``"center"`` ou ``"right"`` ; ``valign`` vaut
-        ``"baseline"``, ``"middle"``, ``"cap"``, ``"top"`` ou ``"bottom"``.
-        ``dx``/``dy`` décalent le tracé après ancrage, pour les retouches
-        optiques — mais un ``dy`` constant est presque toujours le signe d'un
-        mauvais ancrage : ``"cap"`` centre les étiquettes courtes sans retouche.
+        ``halign`` is ``"left"``, ``"center"`` or ``"right"``; ``valign`` is
+        ``"baseline"``, ``"middle"``, ``"cap"``, ``"top"`` or ``"bottom"``.
+        ``dx``/``dy`` nudge the drawing after anchoring, for optical
+        corrections -- but a constant ``dy`` almost always means the anchor is
+        wrong: ``"cap"`` centres short labels with no nudging at all.
 
-        ``angle`` fait pivoter le texte autour du point d'ancrage, dans le sens
-        trigonométrique : ``90`` donne un texte lisible de bas en haut.
+        ``angle`` rotates the text about the anchor point, counterclockwise:
+        ``90`` reads bottom-to-top.
 
-        Rend la boîte em occupée par la chaîne. Avec ``angle`` non nul, cette
-        boîte est celle **avant** rotation, exprimée relativement au point
-        d'ancrage translaté.
+        Returns the em box the string occupies. With a non-zero ``angle`` that
+        box is the one **before** rotation, relative to the translated anchor.
         """
         metrics = self.metrics(style, scale)
         left = metrics.left_edge(0 if angle else x, text, halign) + dx

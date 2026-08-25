@@ -1,72 +1,70 @@
-# Journal des modifications
+# Changelog
 
-Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le
-versionnage [SemVer](https://semver.org/lang/fr/).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Semantic Versioning](https://semver.org/).
 
 ## [1.0.0] — 2026-08-25
 
-Première version publiable. Le paquet `pdf_maker`, jusqu'ici module local, est
-découpé, corrigé et renommé `reportlab_layout`. L'API passe en `snake_case` :
-c'est une rupture assumée, la table de correspondance complète est dans
-[`docs/DOC.md`](docs/DOC.md#migration-depuis-pdf_maker).
+First published release. `pdf_maker`, until now a private local module, is split
+up, corrected and renamed `reportlab_layout`. The API moves to `snake_case`: a
+deliberate break, with the full mapping in
+[`docs/DOC.md`](docs/DOC.md#migrating-from-pdf_maker).
 
-### Corrigé
+### Fixed
 
-- **Centrage vertical du texte.** L'ancrage se calculait par
-  `y - hauteur/2` avec `hauteur = ascendante - descendante`. La descendante
-  étant négative, le texte descendait de `|descendante|` de trop, soit environ
-  20 % du corps. Le décalage correct est `(ascendante + descendante)/2`.
-- **Métriques ignorant l'échelle de tracé.** `drawStringCenterHV` et
-  `drawStringLeftCenterV` lisaient la hauteur au corps nominal du style, tandis
-  que le texte était dessiné à `fontSize × size` ; `drawStringCenterH` mesurait
-  de même la largeur au corps nominal. À `size=0.5`, le centrage était faux d'un
-  facteur deux, horizontalement comme verticalement. `TextMetrics` porte
-  désormais l'échelle et toutes les métriques en tiennent compte.
-- **`before` interprété dans deux unités.** Il était converti en `unit` pour
-  positionner l'élément, mais ajouté en points au curseur, décalant tout ce qui
-  suivait.
-- **`valign="top"` de `drawParagraph`.** La hauteur, en points, était ajoutée à
-  une ordonnée exprimée en `unit`. Remplacé par `valign` sur `draw()`, appliqué
-  en mode absolu.
-- **`addstyle` de `drawTable`.** `TableStyle.add(liste)` empilait la liste comme
-  une commande unique, ce qui faisait échouer le rendu du tableau
-  (`ValueError: not enough values to unpack`). Les commandes supplémentaires
-  passent maintenant par `style=`.
-- **`frameParagraph` levait `TypeError`.** Il transmettait `fontsize=` à
-  `getParagraph`, qui n'acceptait pas ce paramètre.
-- **`get_image` sans largeur levait `TypeError`.** Les paramètres `hauteur` et
-  `scale` étaient déclarés mais ignorés. `ImageSpec.scaled` les gère et refuse
-  explicitement une demande sans contrainte.
-- **`drawParagraph` rendait `(paragraphe, boîte)`**, incohérent avec les autres
-  méthodes de tracé, ce qui cassait les appels déballant quatre valeurs. Toutes
-  les méthodes rendent désormais une `Box`.
-- **`NumberedCanvas` perdait la dernière page** quand il servait de canvas
-  autonome, sans `DocTemplate`.
-- **États de canvas qui fuyaient.** Couleurs, épaisseur de trait et rotation
-  n'étaient pas restaurées après un tracé et contaminaient les suivants.
-- **Collision de styles.** La feuille `styles` était un objet de module partagé :
-  deux modules définissant le même nom de style levaient `KeyError` à l'import.
-- **Impressions sur la sortie standard.** `newFrame` et `drawFrame` écrivaient
-  systématiquement sur `stdout` ; le paquet passe par `logging`.
+- **Vertical text centring.** The anchor was worked out as `y - height/2` with
+  `height = ascent - descent`. Since the descent is negative, text dropped by
+  `|descent|` too much, roughly 20% of the type size. The correct offset is
+  `(ascent + descent)/2`.
+- **Metrics ignoring the drawing scale.** `drawStringCenterHV` and
+  `drawStringLeftCenterV` read the height at the style's nominal size while the
+  text was drawn at `fontSize × size`; `drawStringCenterH` measured the width
+  the same way. At `size=0.5` the centring was wrong by a factor of two, both
+  horizontally and vertically. `TextMetrics` now carries the scale and every
+  metric accounts for it.
+- **`before` read in two different units.** It was converted to `unit` to place
+  the element, but added to the cursor in points, shifting everything after it.
+- **`drawParagraph`'s `valign="top"`.** The height, in points, was added to an
+  ordinate expressed in `unit`. Replaced by `valign` on `draw()`, applied in
+  absolute mode.
+- **`drawTable`'s `addstyle`.** `TableStyle.add(list)` pushed the list on as a
+  single command, which made rendering the table fail with
+  `ValueError: not enough values to unpack`. Extra commands now go through
+  `style=`.
+- **`frameParagraph` raised `TypeError`.** It forwarded `fontsize=` to
+  `getParagraph`, which took no such parameter.
+- **`get_image` raised `TypeError` without a width.** The `hauteur` and `scale`
+  parameters were declared but ignored. `ImageSpec.scaled` handles them and
+  refuses an unconstrained request outright.
+- **`drawParagraph` returned `(paragraph, box)`**, out of step with the other
+  drawing methods, which broke callers unpacking four values. Every method now
+  returns a `Box`.
+- **`NumberedCanvas` lost the last page** when used as a standalone canvas,
+  without a `DocTemplate`.
+- **Canvas state leaking.** Colours, line width and rotation were not restored
+  after a drawing and contaminated the next one.
+- **Style collisions.** The `styles` sheet was a shared module-level object: two
+  modules defining the same style name raised `KeyError` at import time.
+- **Printing to standard output.** `newFrame` and `drawFrame` always wrote to
+  `stdout`; the package now goes through `logging`.
 
-### Ajouté
+### Added
 
-- `Box`, quadruplet nommé rendu par tous les tracés.
-- `TextMetrics`, métriques d'un style à une échelle donnée, avec les ancrages.
-- `PageGeometry` et `Cursor`, seuls dépositaires des conversions de repères.
-- `draw_string`, méthode unique remplaçant les quatre variantes de tracé de
-  chaîne, avec `halign`, `valign`, `angle`, `dx`, `dy`.
-- Ancrage `valign="cap"`, centrage sur la boîte de capitale : sur une étiquette
-  courte, l'encre tombe au milieu de sa case à moins de 0,02 pt, et une rangée
-  d'étiquettes partage la même ligne de base quels que soient leurs jambages.
-  `TextMetrics.cap_height` s'appuie sur `STANDARD_CAP_HEIGHTS`, table reprise
-  des fichiers AFM d'Adobe, que reportlab n'expose pas ;
-  `scripts/cap_height_probe.py` la revérifie par rastérisation.
-- `ImageSpec`, remplaçant le dictionnaire à clés françaises.
-- `make_stylesheet()` et `add_style()`, pour des feuilles de styles isolées.
-- Gestionnaire de contexte : la sortie n'est écrite que si le bloc réussit.
+- `Box`, the named 4-tuple every drawing call returns.
+- `TextMetrics`, a style's metrics at a given scale, with the anchors.
+- `PageGeometry` and `Cursor`, the sole owners of coordinate conversion.
+- `draw_string`, one method replacing the four string-drawing variants, with
+  `halign`, `valign`, `angle`, `dx`, `dy`.
+- The `valign="cap"` anchor, centring on the cap box: on a short label the ink
+  lands within a tenth of a point of the middle of its box, and a row of labels
+  shares one baseline whatever their descenders. `TextMetrics.cap_height` rests
+  on `STANDARD_CAP_HEIGHTS`, a table taken from Adobe's AFM files that reportlab
+  does not expose; `scripts/cap_height_probe.py` checks it by rasterisation.
+- `ImageSpec`, replacing the dictionary with French keys.
+- `make_stylesheet()` and `add_style()`, for isolated stylesheets.
+- Context-manager support: the output is only written if the block succeeds.
 - `cursor_y`, `cursor_point`, `remaining_height`, `Cursor.fits`.
-- Prise en charge des noms de format (`"A4"`, `"letter"`) et des couleurs en
-  hexadécimal ou en nom CSS.
-- Annotations de types sur toute l'API publique, avec `py.typed`.
-- 124 tests, exécutés sur Python 3.11 à 3.14 et reportlab 4.x et 5.x.
+- Support for page-size names (`"A4"`, `"letter"`) and for colours given as hex
+  or CSS names.
+- Type annotations across the public API, with `py.typed`.
+- 131 tests, run on Python 3.11 to 3.14 and reportlab 4.x and 5.x.

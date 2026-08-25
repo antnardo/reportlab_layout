@@ -1,4 +1,4 @@
-"""Géométrie de page et conversions de repères."""
+"""Page geometry and coordinate conversions."""
 
 import pytest
 from reportlab.lib.pagesizes import A4
@@ -22,7 +22,7 @@ class TestResolvePagesize:
         assert resolve_pagesize((100, 200)) == (100.0, 200.0)
 
     def test_unknown_name_raises(self):
-        with pytest.raises(ValueError, match="Format de page inconnu"):
+        with pytest.raises(ValueError, match="Unknown page size"):
             resolve_pagesize("A4bis")
 
 

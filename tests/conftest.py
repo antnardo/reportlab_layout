@@ -1,4 +1,4 @@
-"""Fixtures partagées."""
+"""Shared fixtures."""
 
 from pathlib import Path
 
@@ -11,13 +11,13 @@ from reportlab_layout import PDFMaker, make_stylesheet
 
 @pytest.fixture
 def stylesheet() -> StyleSheet1:
-    """Une feuille de styles neuve, isolée des autres tests."""
+    """A fresh stylesheet, isolated from the other tests."""
     return make_stylesheet()
 
 
 @pytest.fixture
 def out(tmp_path: Path) -> Path:
-    return tmp_path / "sortie.pdf"
+    return tmp_path / "output.pdf"
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def doc(out: Path, stylesheet: StyleSheet1) -> PDFMaker:
 
 @pytest.fixture
 def picture(tmp_path: Path) -> Path:
-    """Une image 200x100 pixels, rouge unie."""
+    """A flat red 200x100 pixel image."""
     path = tmp_path / "image.png"
     PILImage.new("RGB", (200, 100), (255, 0, 0)).save(path)
     return path

@@ -1,4 +1,4 @@
-name: Publier sur PyPI
+name: Publish to PyPI
 
 on:
   release:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Dépôt cible"
+        description: "Target index"
         required: true
         default: testpypi
         type: choice
@@ -14,18 +14,18 @@ on:
 
 jobs:
   build:
-    name: Construire
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv build
-      - name: Vérifier que la version du tag correspond au paquet
+      - name: Check the tag matches the package version
         if: github.event_name == 'release'
         run: |
           tag="${GITHUB_REF_NAME#v}"
           pkg=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
-          echo "tag=$tag paquet=$pkg"
+          echo "tag=$tag package=$pkg"
           test "$tag" = "$pkg"
       - run: uvx twine check dist/*
       - uses: actions/upload-artifact@v4
@@ -42,7 +42,7 @@ jobs:
       name: testpypi
       url: https://test.pypi.org/p/reportlab-layout
     permissions:
-      id-token: write  # publication de confiance : aucun jeton à stocker
+      id-token: write  # trusted publishing: no token to store
     steps:
       - uses: actions/download-artifact@v4
         with:
