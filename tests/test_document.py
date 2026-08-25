@@ -4,6 +4,7 @@ import pytest
 from pypdf import PdfReader
 from reportlab.lib.units import mm
 
+from conftest import fill_rgb
 from reportlab_layout import Box, PDFMaker
 
 
@@ -230,3 +231,21 @@ class TestLifecycle:
         doc.draw_paragraph("Hello")
         doc.save()
         assert read(out).metadata.author == "A. Marchand"
+
+
+class TestApplyStyleColour:
+    """apply_style arms the canvas for a direct drawString: colour included."""
+
+    def test_resets_the_fill_to_black_by_default(self, doc):
+        doc.canvas.setFillColorRGB(1, 1, 1)
+        doc.apply_style("Small")
+        assert fill_rgb(doc.canvas) == (0, 0, 0)
+
+    def test_explicit_colour_is_applied(self, doc):
+        doc.apply_style("Small", color=(0.2, 0.4, 0.6))
+        assert fill_rgb(doc.canvas) == pytest.approx((0.2, 0.4, 0.6))
+
+    def test_colour_none_keeps_the_current_fill(self, doc):
+        doc.canvas.setFillColorRGB(1, 1, 1)
+        doc.apply_style("Small", color=None)
+        assert fill_rgb(doc.canvas) == (1, 1, 1)

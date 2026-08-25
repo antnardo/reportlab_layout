@@ -31,3 +31,13 @@ def picture(tmp_path: Path) -> Path:
     path = tmp_path / "image.png"
     PILImage.new("RGB", (200, 100), (255, 0, 0)).save(path)
     return path
+
+
+def fill_rgb(canvas) -> tuple[float, float, float]:
+    """The canvas fill colour as a plain RGB triple.
+
+    reportlab stores a tuple for ``setFillColorRGB`` and a ``Color`` for
+    ``setFillColor``; this hides the difference.
+    """
+    fill = canvas._fillColorObj
+    return tuple(fill) if isinstance(fill, tuple) else fill.rgb()

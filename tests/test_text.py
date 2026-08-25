@@ -3,6 +3,7 @@
 import pytest
 from reportlab.pdfgen import canvas
 
+from conftest import fill_rgb
 from reportlab_layout.text import TextPainter
 
 
@@ -53,3 +54,40 @@ class TestTextPainter:
     def test_named_style_is_resolved(self, painter, stylesheet):
         box = painter.draw("Hello", 0, 0, style="Small")
         assert box.width == pytest.approx(painter.metrics("Small").width("Hello"))
+
+
+def ink_colour(painter, **kwargs) -> tuple[float, float, float]:
+    """The fill colour in force at the moment the string is actually drawn.
+
+    draw() saves and restores the canvas, so reading the colour afterwards
+    would always give the colour from before the call.
+    """
+    canvas = painter._canvas
+    captured = []
+    original = canvas.drawString
+
+    def record(*args, **kw):
+        captured.append(fill_rgb(canvas))
+        return original(*args, **kw)
+
+    canvas.drawString = record
+    try:
+        painter.draw("Hello", 100, 200, **kwargs)
+    finally:
+        canvas.drawString = original
+    return captured[0]
+
+
+class TestDefaultColour:
+    """A previous rectangle must not tint the text drawn after it."""
+
+    def test_text_is_black_even_after_a_white_fill(self, painter):
+        painter._canvas.setFillColorRGB(1, 1, 1)
+        assert ink_colour(painter) == (0, 0, 0)
+
+    def test_explicit_colour_still_wins(self, painter):
+        assert ink_colour(painter, color=(1, 0, 0)) == (1, 0, 0)
+
+    def test_colour_none_keeps_the_current_fill(self, painter):
+        painter._canvas.setFillColorRGB(0, 0, 1)
+        assert ink_colour(painter, color=None) == (0, 0, 1)

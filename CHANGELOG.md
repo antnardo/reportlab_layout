@@ -3,6 +3,21 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] — 2026-08-25
+
+### Fixed
+
+- **Text no longer inherits the canvas fill colour.** `draw_string` and
+  `apply_style` only set the fill when given an explicit colour, so a string
+  drawn right after a filled shape came out in that shape's colour — white on
+  white where the shape was a white background, which made the text vanish
+  entirely. Both now default to black; pass `color=None` to deliberately keep
+  the current colour.
+
+  This is a regression against the module this package grew out of, whose
+  `set_style` reset the fill to black on every call. It is worth checking any
+  document produced with 1.0.0 or 1.0.1 that draws text over filled shapes.
+
 ## [1.0.1] — 2026-08-25
 
 A documentation release. Nothing executable changed: same behaviour, same API,

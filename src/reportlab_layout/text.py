@@ -40,7 +40,7 @@ class TextPainter:
         *,
         style: StyleLike = None,
         scale: float = 1.0,
-        color: ColorLike = None,
+        color: ColorLike = "black",
         halign: str = "left",
         valign: str = "baseline",
         angle: float = 0,
@@ -54,6 +54,11 @@ class TextPainter:
         ``dx``/``dy`` nudge the drawing after anchoring, for optical
         corrections -- but a constant ``dy`` almost always means the anchor is
         wrong: ``"cap"`` centres short labels with no nudging at all.
+
+        ``color`` defaults to black rather than to whatever fill colour the
+        canvas happens to carry: text that silently inherits the fill left by
+        the last rectangle is a classic way to draw white on white. Pass
+        ``color=None`` to deliberately keep the current colour.
 
         ``angle`` rotates the text about the anchor point, counterclockwise:
         ``90`` reads bottom-to-top.

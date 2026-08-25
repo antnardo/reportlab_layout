@@ -486,12 +486,16 @@ class PDFMaker:
         return TextMetrics(resolve_style(style, self.stylesheet), scale)
 
     def apply_style(
-        self, style: StyleLike = None, scale: float = 1.0, color: ColorLike = None
+        self, style: StyleLike = None, scale: float = 1.0, color: ColorLike = "black"
     ) -> TextMetrics:
         """Arm the canvas font and colour for a direct drawing call.
 
         Useful before calling ``document.canvas.drawString`` yourself. The
         ``draw_string`` method already does it.
+
+        ``color`` defaults to black: arming a font without resetting the colour
+        would leave the text in whatever fill the last shape used. Pass
+        ``color=None`` to deliberately keep the current colour.
         """
         metrics = self.metrics(style, scale)
         self.canvas.setFont(metrics.font_name, metrics.font_size)
