@@ -1,8 +1,9 @@
 # reportlab_layout
 
+[![CI](https://github.com/antnardo/reportlab_layout/actions/workflows/ci.yml/badge.svg)](https://github.com/antnardo/reportlab_layout/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/reportlab_layout.svg)](https://pypi.org/project/reportlab_layout/)
 [![Python](https://img.shields.io/pypi/pyversions/reportlab_layout.svg)](https://pypi.org/project/reportlab_layout/)
-[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/antnardo/reportlab_layout/blob/main/LICENSE)
 
 Un curseur qui descend dans la page, et le canvas reportlab resté sous la main.
 
@@ -78,7 +79,7 @@ fausse : la descendante étant négative, elle descend le texte de `|descendante
 de trop, soit environ 20 % du corps. Le bon décalage est
 `y_centre - (ascendante + descendante)/2`.
 
-![Ancienne formule contre valign='middle'](docs/img/centrage.png)
+![Ancienne formule contre valign='middle'](https://raw.githubusercontent.com/antnardo/reportlab_layout/main/docs/img/centrage.png)
 
 Le filet rouge marque le milieu exact de la case. À gauche l'ancienne formule, à
 droite `valign="middle"`. En bas la même chose au corps réduit de moitié : la
@@ -99,7 +100,7 @@ quand la chaîne n'en a pas — un libellé comme `DS 3` s'en trouve haut d'envi
 courte, l'encre tombe au milieu de sa case à moins d'un vingtième de point, et
 une rangée d'étiquettes partage la même ligne de base qu'elles aient ou non des
 jambages. C'est l'ancrage des cellules, bandeaux et badges. Le détail chiffré
-est dans [`docs/DOC.md`](docs/DOC.md#middle-ou-cap-).
+est dans [`docs/DOC.md`](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md#middle-ou-cap-).
 
 ## Étude comparative
 
@@ -191,11 +192,11 @@ l'eau sans compter les points à la main.
 
 ## Aller plus loin
 
-- [`docs/DOC.md`](docs/DOC.md) — référence complète de l'API, repères,
+- [`docs/DOC.md`](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md) — référence complète de l'API, repères,
   positionnement, styles, métriques, frames, pagination.
-- [`examples/attestation.py`](examples/attestation.py) — un document d'une page,
+- [`examples/attestation.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/attestation.py) — un document d'une page,
   flux et tracé absolu mêlés.
-- [`scripts/centering_proof.py`](scripts/centering_proof.py) — la preuve
+- [`scripts/centering_proof.py`](https://github.com/antnardo/reportlab_layout/blob/main/scripts/centering_proof.py) — la preuve
   chiffrée et visuelle du centrage.
 
 ## Compatibilité
