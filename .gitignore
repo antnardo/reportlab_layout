@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.DS_Store
+*.pdf
+!docs/**/*.pdf
+logs/
+
+# Ancien pdf_maker, conservé en local le temps de la relecture.
+legacy/
