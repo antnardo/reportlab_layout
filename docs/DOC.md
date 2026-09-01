@@ -323,6 +323,8 @@ behind on the canvas.
 doc.draw_line(x1, y1, x2, y2, stroke="black", line_width=0.5)
 doc.draw_rect(x, y, w, h, fill=None, stroke="black", line_width=0.5)
 doc.draw_round_rect(x, y, w, h, radius=5, fill=None, stroke="black", line_width=0.5)
+doc.draw_ellipse(x, y, radius_x, radius_y, fill=None, stroke="black", line_width=0.5)
+doc.draw_circle(x, y, radius, fill=None, stroke="black", line_width=0.5)
 doc.draw_polygon(points, close=True, fill_mode=FILL_NON_ZERO, line_join=None)
 doc.draw_regular_polygon(x, y, radius, vertices=5, leap=1, start_angle=90)
 ```
@@ -330,6 +332,11 @@ doc.draw_regular_polygon(x, y, radius, vertices=5, leap=1, start_angle=90)
 `fill=None` leaves the inside empty; `stroke=None` drops the outline. Colours
 accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
 reportlab `Color`. `radius` is clamped to half the shorter side.
+
+`draw_ellipse` and `draw_circle` take a **centre** and radii, not a bounding box:
+a shape defined by a centre is nearly always placed by its centre, and
+reportlab's own corner-to-corner form makes that an arithmetic chore at every
+call site. `draw_circle` is `draw_ellipse` with equal radii.
 
 `draw_regular_polygon` inscribes the shape in a circle of `radius`. `leap` is
 how many vertices each edge skips — the *k* of the Schläfli symbol {n/k}, so

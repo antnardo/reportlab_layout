@@ -3,6 +3,18 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-09-01
+
+### Added
+
+- `ShapePainter.ellipse` and `ShapePainter.circle`, with the matching
+  `PDFMaker.draw_ellipse` and `PDFMaker.draw_circle`.
+
+  Both take a **centre** and radii rather than a bounding box, to match
+  `regular_polygon`: a shape defined by a centre is nearly always placed by its
+  centre, and reportlab's own corner-to-corner form makes that an arithmetic
+  chore at every call site. `circle` is `ellipse` with equal radii.
+
 ## [1.1.0] — 2026-09-01
 
 ### Added

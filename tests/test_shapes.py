@@ -24,6 +24,23 @@ class TestShapePainter:
         """A radius larger than half the side folds the path back on itself."""
         assert tuple(painter.round_rect(0, 0, 20, 10, radius=50)) == pytest.approx((0, 0, 20, 10))
 
+    def test_ellipse_is_centred_on_its_point(self, painter):
+        assert tuple(painter.ellipse(50, 50, 30, 10)) == pytest.approx((20, 40, 60, 20))
+
+    def test_circle_is_an_ellipse_with_equal_radii(self, painter):
+        assert tuple(painter.circle(50, 50, 10)) == tuple(painter.ellipse(50, 50, 10, 10))
+
+    @pytest.mark.parametrize("rx,ry", [(0, 10), (10, 0), (-1, 10), (10, -1)])
+    def test_ellipse_rejects_a_non_positive_radius(self, painter, rx, ry):
+        with pytest.raises(ValueError, match="radii must be positive"):
+            painter.ellipse(0, 0, rx, ry)
+
+    def test_circle_forwards_its_keywords(self, painter):
+        """`fill` and friends must reach the ellipse, not be swallowed."""
+        before = painter._canvas._fillColorObj
+        painter.circle(10, 10, 5, fill=(1, 0, 0))
+        assert painter._canvas._fillColorObj == before
+
     def test_polygon_returns_the_bounding_box_of_its_points(self, painter):
         box = painter.polygon([(0, 0), (30, 0), (30, 40), (10, 25)])
         assert tuple(box) == pytest.approx((0, 0, 30, 40))

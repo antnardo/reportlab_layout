@@ -1,4 +1,4 @@
-"""Geometric primitives: rules, rectangles, rounded rectangles, polygons.
+"""Geometric primitives: rules, rectangles, rounded rectangles, ellipses, polygons.
 
 Every drawing is wrapped in ``saveState`` / ``restoreState``, so the colour and
 line width chosen here do not leak into whatever is drawn next.
@@ -104,6 +104,51 @@ class ShapePainter:
         canvas.drawPath(path, fill=int(fill_color is not None), stroke=int(stroke_color is not None))
         canvas.restoreState()
         return Box(x, y, width, height)
+
+    def ellipse(
+        self,
+        x: float,
+        y: float,
+        radius_x: float,
+        radius_y: float,
+        *,
+        fill: ColorLike = None,
+        stroke: ColorLike = "black",
+        line_width: float = 0.5,
+    ) -> Box:
+        """Draw an ellipse **centred** on ``(x, y)``. Returns its bounding box.
+
+        Centre and radii rather than a bounding box, to match
+        :meth:`regular_polygon`: a shape defined by a centre is nearly always
+        placed by its centre, and reportlab's own corner-to-corner form makes
+        that an arithmetic chore at every call site.
+        """
+        if radius_x <= 0 or radius_y <= 0:
+            raise ValueError(f"radii must be positive, got ({radius_x}, {radius_y})")
+
+        canvas = self._canvas
+        fill_color = to_color(fill)
+        stroke_color = to_color(stroke)
+        canvas.saveState()
+        canvas.setLineWidth(line_width)
+        if fill_color is not None:
+            canvas.setFillColor(fill_color)
+        if stroke_color is not None:
+            canvas.setStrokeColor(stroke_color)
+        canvas.ellipse(
+            x - radius_x,
+            y - radius_y,
+            x + radius_x,
+            y + radius_y,
+            stroke=int(stroke_color is not None),
+            fill=int(fill_color is not None),
+        )
+        canvas.restoreState()
+        return Box(x - radius_x, y - radius_y, 2 * radius_x, 2 * radius_y)
+
+    def circle(self, x: float, y: float, radius: float, **kwargs: object) -> Box:
+        """Draw a circle centred on ``(x, y)`` -- an ellipse with equal radii."""
+        return self.ellipse(x, y, radius, radius, **kwargs)  # type: ignore[arg-type]
 
     def polygon(
         self,

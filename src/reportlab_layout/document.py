@@ -525,6 +525,14 @@ class PDFMaker:
         """Draw a rounded rectangle, canvas coordinates in points."""
         return self.shapes.round_rect(x, y, width, height, **kwargs)
 
+    def draw_ellipse(self, x: float, y: float, radius_x: float, radius_y: float, **kwargs: Any) -> Box:
+        """Draw an ellipse centred on ``(x, y)``, canvas coordinates in points."""
+        return self.shapes.ellipse(x, y, radius_x, radius_y, **kwargs)
+
+    def draw_circle(self, x: float, y: float, radius: float, **kwargs: Any) -> Box:
+        """Draw a circle centred on ``(x, y)``, canvas coordinates in points."""
+        return self.shapes.circle(x, y, radius, **kwargs)
+
     def draw_polygon(self, points: Sequence[tuple[float, float]], **kwargs: Any) -> Box:
         """Draw a polygon through ``points``, canvas coordinates in points."""
         return self.shapes.polygon(points, **kwargs)
