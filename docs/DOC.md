@@ -323,11 +323,33 @@ behind on the canvas.
 doc.draw_line(x1, y1, x2, y2, stroke="black", line_width=0.5)
 doc.draw_rect(x, y, w, h, fill=None, stroke="black", line_width=0.5)
 doc.draw_round_rect(x, y, w, h, radius=5, fill=None, stroke="black", line_width=0.5)
+doc.draw_polygon(points, close=True, fill_mode=FILL_NON_ZERO, line_join=None)
+doc.draw_regular_polygon(x, y, radius, vertices=5, leap=1, start_angle=90)
 ```
 
 `fill=None` leaves the inside empty; `stroke=None` drops the outline. Colours
 accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
 reportlab `Color`. `radius` is clamped to half the shorter side.
+
+`draw_regular_polygon` inscribes the shape in a circle of `radius`. `leap` is
+how many vertices each edge skips — the *k* of the Schläfli symbol {n/k}, so
+`leap=1` gives a convex polygon and `vertices=5, leap=2` the five-pointed star.
+`start_angle` is in degrees counterclockwise from east, the default 90 putting a
+vertex straight up. `leap` must be coprime with `vertices`: {6/2} would close
+after three vertices and quietly draw a triangle instead of the hexagram, which
+needs two separate paths, so that combination raises.
+
+`fill_mode` only matters for a self-crossing path, and there it decides the whole
+look:
+
+```python
+doc.draw_regular_polygon(x, y, 20, vertices=5, leap=2, fill="black")                 # solid star
+doc.draw_regular_polygon(x, y, 20, vertices=5, leap=2, fill="black", fill_mode=0)    # hollow centre
+```
+
+`line_join` takes reportlab's codes — 0 mitre, 1 round, 2 bevel. Sharp points at
+a small size usually read better rounded, a mitre spike extending well past the
+vertex.
 
 ## Images
 

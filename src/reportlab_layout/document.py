@@ -16,7 +16,7 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 """
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -524,3 +524,11 @@ class PDFMaker:
     def draw_round_rect(self, x: float, y: float, width: float, height: float, **kwargs: Any) -> Box:
         """Draw a rounded rectangle, canvas coordinates in points."""
         return self.shapes.round_rect(x, y, width, height, **kwargs)
+
+    def draw_polygon(self, points: Sequence[tuple[float, float]], **kwargs: Any) -> Box:
+        """Draw a polygon through ``points``, canvas coordinates in points."""
+        return self.shapes.polygon(points, **kwargs)
+
+    def draw_regular_polygon(self, x: float, y: float, radius: float, **kwargs: Any) -> Box:
+        """Draw a regular polygon or star centred on ``(x, y)``."""
+        return self.shapes.regular_polygon(x, y, radius, **kwargs)

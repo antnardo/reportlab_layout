@@ -3,6 +3,25 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-09-01
+
+### Added
+
+- `ShapePainter.polygon` and `ShapePainter.regular_polygon`, with the matching
+  `PDFMaker.draw_polygon` and `PDFMaker.draw_regular_polygon`. Arbitrary vertex
+  lists, and regular polygons or star polygons inscribed in a circle.
+
+  `regular_polygon` takes the *k* of the Schläfli symbol {n/k} as `leap`, so
+  `vertices=5, leap=2` draws the five-pointed star. A `leap` sharing a divisor
+  with `vertices` raises rather than silently drawing a smaller shape: {6/2}
+  closes after three vertices and would trace a triangle, the hexagram needing
+  two separate paths.
+
+  `polygon` exposes `fill_mode`, which decides how a self-crossing path is
+  filled — solid with the default `FILL_NON_ZERO`, hollow-centred with
+  `FILL_EVEN_ODD` — and `line_join`, mitre spikes on small sharp points being
+  a common surprise.
+
 ## [1.0.2] — 2026-08-25
 
 ### Fixed
