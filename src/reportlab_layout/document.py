@@ -16,9 +16,10 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 """
 
 import logging
+import os
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any, Protocol, TypeAlias
 
 from reportlab.lib.styles import StyleSheet1
 from reportlab.lib.units import mm
@@ -36,17 +37,58 @@ from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, resolve_style
 from reportlab_layout.text import TextPainter
 
-__all__ = ["PDFMaker"]
+__all__ = ["OutputLike", "PDFMaker", "Writable"]
 
 logger = logging.getLogger(__name__)
 
 TableCommand: TypeAlias = tuple[Any, ...]
 
 
+class Writable(Protocol):
+    """All reportlab asks of a file object: a ``write`` method that takes bytes.
+
+    A protocol rather than ``BinaryIO``, which a type checker only matches
+    against file classes: a Django ``HttpResponse`` writes bytes just as well,
+    and would be refused. A file opened in text mode is still refused, as it
+    should be.
+    """
+
+    def write(self, data: bytes, /) -> object: ...
+
+
+#: Where a document is written: a path, or a binary file object -- an
+#: ``io.BytesIO``, a file opened in ``"wb"`` mode, a Django ``HttpResponse``.
+OutputLike: TypeAlias = str | os.PathLike[str] | Writable
+
+
+def _canvas_target(output: OutputLike) -> str | Writable:
+    """What to hand reportlab's ``Canvas``: a path as ``str``, a file object as is.
+
+    ``Canvas`` takes a ``str`` or anything with a ``write`` method -- not even a
+    ``Path``. Converting everything with ``str()`` covered paths, but turned a
+    ``BytesIO`` into a file name, its repr: the buffer stayed empty and a file
+    called ``<_io.BytesIO object at 0x...>`` appeared in the working directory.
+
+    The file object is recognised the way reportlab does it, by a callable
+    ``write``. Making :class:`Writable` runtime-checkable would not do: from
+    Python 3.12 its ``isinstance`` misses a ``NamedTemporaryFile``, whose
+    ``write`` only exists through ``__getattr__``. Anything else is refused
+    here, rather than when ``save()`` gets to it.
+    """
+    if isinstance(output, str | os.PathLike):
+        return os.fspath(output)
+    if callable(getattr(output, "write", None)):
+        return output
+    raise TypeError(f"Expected a path or a binary file object, got {type(output).__name__}")
+
+
 class PDFMaker:
     """A PDF document built page by page, with a flow cursor.
 
-    :param path: the output file.
+    :param path: where the PDF goes: a path, or a binary file object -- an
+        ``io.BytesIO``, a file opened in ``"wb"`` mode, a Django
+        ``HttpResponse``. A file object receives the whole PDF at :meth:`save`
+        and is left open.
     :param pagesize: a name (``"A4"``, ``"letter"``...) or a ``(width, height)``
         pair in points.
     :param landscape: flip the page size to landscape.
@@ -64,7 +106,7 @@ class PDFMaker:
 
     def __init__(
         self,
-        path: str | Path,
+        path: OutputLike,
         *,
         pagesize: str | tuple[float, float] = "A4",
         landscape: bool = False,
@@ -87,7 +129,9 @@ class PDFMaker:
             top=top,
             bottom=bottom,
         )
-        self.canvas = pdfcanvas.Canvas(str(path), pagesize=(self.geometry.width, self.geometry.height))
+        self.canvas = pdfcanvas.Canvas(
+            _canvas_target(path), pagesize=(self.geometry.width, self.geometry.height)
+        )
         self.unit = unit
         self.font_size = font_size
         self.stylesheet = stylesheet if stylesheet is not None else STYLES
@@ -155,7 +199,12 @@ class PDFMaker:
         return self.page
 
     def save(self) -> None:
-        """Draw the last page's header and footer, then write the file."""
+        """Draw the last page's header and footer, then write the PDF.
+
+        A file object is written to but not closed, since the caller still has
+        to read or send it. Its position is left at the end of the PDF: rewind
+        it with ``seek(0)`` before reading it back.
+        """
         self.draw_header_footer()
         self.canvas.save()
 

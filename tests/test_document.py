@@ -1,5 +1,8 @@
 """The cursor document: flow, absolute placement, pagination."""
 
+import io
+from pathlib import Path
+
 import pytest
 from pypdf import PdfReader
 from reportlab.lib.units import mm
@@ -231,6 +234,75 @@ class TestLifecycle:
         doc.draw_paragraph("Hello")
         doc.save()
         assert read(out).metadata.author == "A. Marchand"
+
+
+class TestOutput:
+    """Where the PDF goes: a path, or a file object as a web view needs."""
+
+    @pytest.mark.parametrize("as_path", [str, Path])
+    def test_path_is_written_whether_str_or_pathlike(self, out, stylesheet, as_path):
+        with PDFMaker(as_path(out), stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        assert "Hello" in page_text(out)
+
+    def test_bytesio_receives_the_pdf(self, stylesheet):
+        buffer = io.BytesIO()
+        with PDFMaker(buffer, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        assert buffer.getvalue().startswith(b"%PDF-")
+
+    def test_bytesio_is_not_turned_into_a_file_name(self, tmp_path, monkeypatch, stylesheet):
+        """1.2.0 wrote a file called `<_io.BytesIO object at 0x...>` instead."""
+        monkeypatch.chdir(tmp_path)
+        with PDFMaker(io.BytesIO(), stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        assert list(tmp_path.iterdir()) == []
+
+    def test_bytesio_is_left_open_for_the_caller(self, stylesheet):
+        buffer = io.BytesIO()
+        with PDFMaker(buffer, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        assert not buffer.closed
+
+    def test_bytesio_reads_back_as_the_document(self, stylesheet):
+        buffer = io.BytesIO()
+        with PDFMaker(buffer, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        buffer.seek(0)
+        assert "Hello" in PdfReader(buffer).pages[0].extract_text()
+
+    def test_nothing_reaches_the_buffer_before_save(self, stylesheet):
+        buffer = io.BytesIO()
+        doc = PDFMaker(buffer, stylesheet=stylesheet)
+        doc.draw_paragraph("Hello")
+        assert buffer.getvalue() == b""
+
+    def test_file_opened_in_binary_mode_is_left_open(self, out, stylesheet):
+        with out.open("wb") as handle:
+            with PDFMaker(handle, stylesheet=stylesheet) as doc:
+                doc.draw_paragraph("Hello")
+            assert not handle.closed
+        assert "Hello" in page_text(out)
+
+    def test_any_object_with_a_write_method_is_accepted(self, stylesheet):
+        """All a Django HttpResponse offers of a file is write()."""
+
+        class Sink:
+            def __init__(self):
+                self.chunks = []
+
+            def write(self, data):
+                self.chunks.append(data)
+
+        sink = Sink()
+        with PDFMaker(sink, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("Hello")
+        assert b"".join(sink.chunks).startswith(b"%PDF-")
+
+    @pytest.mark.parametrize("output", [None, 42, b"output.pdf"])
+    def test_neither_path_nor_file_is_rejected_at_once(self, stylesheet, output):
+        with pytest.raises(TypeError, match="path or a binary file object"):
+            PDFMaker(output, stylesheet=stylesheet)
 
 
 class TestApplyStyleColour:

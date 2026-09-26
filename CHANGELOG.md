@@ -3,6 +3,25 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`PDFMaker` writes into a file object.** `PDFMaker(io.BytesIO())` left the
+  buffer empty, and wrote a file literally named `<_io.BytesIO object at 0x…>`
+  into the working directory: the output went through `str()` before reaching
+  reportlab. A binary file object — `io.BytesIO`, a file opened in `"wb"` mode,
+  a Django `HttpResponse` — now goes to reportlab as it is, which is what a web
+  view returning a PDF needs. It receives the whole PDF at `save()`, or at the
+  end of the `with` block, and is left open, positioned after the PDF: call
+  `seek(0)` before reading it back. Anything that is neither a path nor a file
+  object raises `TypeError` at construction, instead of becoming a file name.
+
+### Added
+
+- `OutputLike`, the type of `PDFMaker`'s first argument, and `Writable`, the
+  protocol a file object has to meet: a `write` method that takes bytes.
+
 ## [1.2.0] — 2026-09-01
 
 ### Added

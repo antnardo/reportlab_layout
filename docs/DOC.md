@@ -46,7 +46,7 @@ A PostScript point is 1/72 inch. `reportlab.lib.units` provides `mm`, `cm`,
 from reportlab_layout import PDFMaker
 
 doc = PDFMaker(
-    "output.pdf",
+    "output.pdf",           # a path, or a binary file object: see below
     pagesize="A4",          # a reportlab name, or a (width, height) pair in points
     landscape=False,
     unit=mm,                # the unit of the x= and y= passed to draw_* methods
@@ -68,6 +68,39 @@ with PDFMaker("output.pdf") as doc:
 
 Otherwise call `doc.save()` yourself. `save()` draws the last page's header and
 footer before writing.
+
+### Writing into memory
+
+The first argument may also be a binary file object: an `io.BytesIO`, a file
+opened in `"wb"` mode, a Django `HttpResponse` — anything with a `write` method
+that takes bytes. That is how a web view returns a PDF without touching the
+disk:
+
+```python
+import io
+
+from django.http import FileResponse
+
+
+def report(request):
+    buffer = io.BytesIO()
+    with PDFMaker(buffer) as doc:
+        doc.draw_paragraph("Third-term report", "Heading1 Centered")
+    buffer.seek(0)
+    return FileResponse(buffer, as_attachment=True, filename="report.pdf")
+```
+
+With Flask, the same buffer goes to
+`send_file(buffer, mimetype="application/pdf", download_name="report.pdf")`.
+
+Nothing reaches the file object before `save()`, or before the `with` block
+ends. The whole PDF is then written in one go, and the object is **left open**,
+because you still have to read or send it. Its position is left at the end of
+the PDF, hence the `seek(0)` before handing it on. `buffer.getvalue()` does not
+need it.
+
+For type annotations, the accepted types are spelled `OutputLike`, and
+`Writable` is the protocol a file object has to meet.
 
 ### Geometry attributes
 

@@ -17,7 +17,7 @@ exact point.
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
 from reportlab_layout.cursor import Cursor
-from reportlab_layout.document import PDFMaker
+from reportlab_layout.document import OutputLike, PDFMaker, Writable
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import Margins, PageGeometry, resolve_pagesize
 from reportlab_layout.images import ImageSpec, image_spec, load_image
@@ -46,12 +46,14 @@ __all__ = [
     "ImageSpec",
     "Margins",
     "NumberedCanvas",
+    "OutputLike",
     "PDFMaker",
     "PageGeometry",
     "ShapePainter",
     "StyleLike",
     "TextMetrics",
     "TextPainter",
+    "Writable",
     "__version__",
     "add_style",
     "baseline_offset",
