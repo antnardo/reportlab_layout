@@ -22,6 +22,7 @@
 - [Page "x of y" numbering](#page-x-of-y-numbering)
 - [Debugging a layout](#debugging-a-layout)
 - [Migrating from `pdf_maker`](#migrating-from-pdf_maker)
+- [Every name the package exports](#every-name-the-package-exports)
 
 ## The two coordinate systems
 
@@ -677,6 +678,8 @@ edge instead of stacking. That is how a logo on the left and a centred title
 share one band.
 
 `doc.header` and `doc.footer` are plain lists; you may assign to them directly.
+`new_page` and `save` call `draw_header_footer` for you; call it yourself only
+to stamp a band onto a page you are closing by hand.
 
 ## Pagination
 
@@ -873,3 +876,107 @@ Two changes will not show up when re-reading the code:
 - **`before=` is now in `unit`** everywhere. It used to be in `unit` for
   positioning and in points for advancing the cursor, which shifted everything
   that followed.
+
+## Every name the package exports
+
+Everything below comes straight from `reportlab_layout`. Most of it you reach
+through a `PDFMaker`, which wraps the painters and the factories; the rest is
+there for the times you want a piece on its own.
+
+```python
+from reportlab_layout import PDFMaker, make_stylesheet, add_style
+```
+
+### The document
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `PDFMaker` | a document built page by page, with a flow cursor | [Creating a document](#creating-a-document) |
+| `OutputLike` | what `PDFMaker` takes as its output: a path or a file object | [Writing into memory](#writing-into-memory) |
+| `Writable` | the protocol a file object has to meet — a `write` taking bytes | [Writing into memory](#writing-into-memory) |
+| `NumberedCanvas` | a canvas that stamps "page x of y" once the count is known | [Page "x of y" numbering](#page-x-of-y-numbering) |
+| `__version__` | the installed version, as a string | |
+
+### Geometry
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `PageGeometry` | page size and margins, and the content area they leave | [The two coordinate systems](#the-two-coordinate-systems) |
+| `Margins` | the four margins, in points; `Margins.build` takes them in `unit` | [The two coordinate systems](#the-two-coordinate-systems) |
+| `Cursor` | the writing depth, behind `doc.cursor` | [The cursor](#the-cursor) |
+| `Box` | the rectangle a drawing occupied, returned by every call | [Laying down flowables](#laying-down-flowables) |
+| `resolve_pagesize` | a name such as `"A4"`, or a pair, to a `(width, height)` in points | [Creating a document](#creating-a-document) |
+
+### Text and its metrics
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `TextPainter` | draws anchored strings, behind `doc.text` and `doc.draw_string` | [Drawing text](#drawing-text) |
+| `TextMetrics` | a style's metrics at a given scale, and the anchor arithmetic | [Font metrics](#font-metrics) |
+| `string_width` | the width of a string in a style | [Font metrics](#font-metrics) |
+| `font_ascent`, `font_descent` | how far a style reaches above and below the baseline | [Font metrics](#font-metrics) |
+| `font_height` | the height of its em box, `ascent - descent` | [Font metrics](#font-metrics) |
+| `cap_height` | the height of its capitals | [Font metrics](#font-metrics) |
+| `baseline_offset` | what to subtract from a target centre to get the baseline | [`middle` or `cap`?](#middle-or-cap) |
+| `register_font_family` | registers a TrueType family so `<b>` and `<i>` switch faces | [TrueType fonts](#truetype-fonts) |
+
+The five metric functions are shortcuts onto `TextMetrics`; reach for the class
+when you want several figures at once, since it computes them from one lookup.
+
+### Styles and colours
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `make_stylesheet` | a fresh stylesheet, extended with the usual alignments | [Styles](#styles) |
+| `add_style` | adds or replaces a style derived from a parent | [Styles](#styles) |
+| `STYLES` | the shared default stylesheet — convenient, and a trap in a library | [Styles](#styles) |
+| `StyleLike` | a style, its name, or `None` for `Normal` | [Styles](#styles) |
+| `resolve_style` | turns any of those three into a `ParagraphStyle` | [Styles](#styles) |
+| `ColorLike` | a `Color`, a CSS name, `"#rrggbb"`, or a tuple in `0..1` | [Shapes](#shapes) |
+| `to_color` | turns any of those into a reportlab `Color` | [Shapes](#shapes) |
+
+### Shapes, images and frames
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `ShapePainter` | rules, rectangles, ellipses and polygons, behind `doc.shapes` | [Shapes](#shapes) |
+| `ImageSpec` | an image's path and pixel size, read once | [Images](#images) |
+| `image_spec` | reads that size from a file | [Images](#images) |
+| `load_image` | an `Image` flowable sized in points, aspect ratio kept | [Images](#images) |
+| `inline_image` | the `<img/>` tag of an image standing on the baseline | [Images inside a line](#images-inside-a-line) |
+| `FrameWriter` | fills a reportlab `Frame` and reports what overflowed | [Frames](#frames) |
+
+### Paragraphs and columns
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `InlineParagraph` | a paragraph whose lines make room for the images they hold | [Images inside a line](#images-inside-a-line) |
+| `TaggedParagraph` | a paragraph with a tag flush right on its last line | [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph) |
+| `pack_columns` | lays a story into columns without drawing anything | [Packing columns yourself](#packing-columns-yourself) |
+| `balanced_height` | the lowest height at which a story still fits the columns | [Packing columns yourself](#packing-columns-yourself) |
+| `keep_with_next` | binds each `keepWithNext` run to the flowable after it | [Columns](#columns) |
+| `Packing` | what `pack_columns` returns: placements, leftovers, height | [Packing columns yourself](#packing-columns-yourself) |
+| `Placement` | where one flowable landed: column, depth, size | [Packing columns yourself](#packing-columns-yourself) |
+
+### What `PDFMaker` offers
+
+Its own sections describe these; the list is here so that nothing is hidden.
+
+- **Lifecycle** — `save`, `set_metadata`, `new_page`, and the `with` block.
+- **Cursor** — `cursor_y`, `cursor_point`, `remaining_height`, `advance`,
+  `add_space`, `reset_cursor`.
+- **Factories** — `make_paragraph`, `make_spacer`, `make_table`, `make_image`.
+- **Flow and absolute placement** — `draw`, `draw_paragraph`, `draw_table`,
+  `draw_image`, `draw_centered_line`, `draw_columns`.
+- **Straight onto the canvas** — `draw_string`, `apply_style`, `metrics`,
+  `draw_line`, `draw_rect`, `draw_round_rect`, `draw_ellipse`, `draw_circle`,
+  `draw_polygon`, `draw_regular_polygon`.
+- **Header and footer** — `set_header`, `set_footer`, `draw_header_footer`.
+- **Frames** — `new_frame`, `draw_frame`, `frame_paragraph`, `frame_space`,
+  `frame_image`.
+- **Attributes** — the parts: `canvas`, `geometry`, `cursor`, `shapes`, `text`,
+  `stylesheet`, `active_frame`. The settings, all writable after construction:
+  `unit`, `font_size`, `default_space`, `auto_page_break`, `show_boundaries`,
+  `header`, `footer`, `page`. And the geometry snapshots: `width`, `height`,
+  `left`, `right`, `top`, `bottom`, `content_width`, `content_height`,
+  `x_left`, `x_right`, `y_top`, `y_bottom`, `bottom_depth`.
