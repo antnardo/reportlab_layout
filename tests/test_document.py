@@ -1,6 +1,7 @@
 """The cursor document: flow, absolute placement, pagination."""
 
 import io
+import logging
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from pypdf import PdfReader
 from reportlab.lib.units import mm
 
 from conftest import fill_rgb
-from reportlab_layout import Box, PDFMaker
+from reportlab_layout import Box, PDFMaker, add_style
 
 
 def read(path):
@@ -17,6 +18,22 @@ def read(path):
 
 def page_text(path, index=0):
     return read(path).pages[index].extract_text()
+
+
+def baselines(path, index=0):
+    """Map each line of text on a page to the canvas ordinate of its baseline.
+
+    pypdf hands the visitor the text matrix and the transformation in force;
+    reportlab lays a flowable down by translating the canvas, so both count.
+    """
+    found = {}
+
+    def record(text, cm, tm, font_dict, font_size):
+        if text.strip():
+            found[text.strip()] = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+
+    read(path).pages[index].extract_text(visitor_text=record)
+    return found
 
 
 class TestGeometryExport:
@@ -124,15 +141,16 @@ class TestPagination:
 
 
 class TestHeaderFooter:
-    def test_footer_is_repeated_on_every_page(self, out, stylesheet):
+    @pytest.mark.parametrize("setter", ["set_header", "set_footer"])
+    def test_band_is_repeated_on_every_page(self, out, stylesheet, setter):
         doc = PDFMaker(out, stylesheet=stylesheet)
-        doc.set_footer(doc.make_paragraph("Footer text"))
+        getattr(doc, setter)(doc.make_paragraph("Band text"))
         doc.draw_paragraph("Page one")
         doc.new_page()
         doc.draw_paragraph("Page two")
         doc.save()
-        assert "Footer text" in page_text(out, 0)
-        assert "Footer text" in page_text(out, 1)
+        assert "Band text" in page_text(out, 0)
+        assert "Band text" in page_text(out, 1)
 
     def test_footer_accepts_several_flowables(self, out, stylesheet):
         doc = PDFMaker(out, stylesheet=stylesheet)
@@ -141,11 +159,64 @@ class TestHeaderFooter:
         text = page_text(out)
         assert "Left" in text and "Right side" in text
 
-    def test_footer_does_not_move_the_cursor(self, doc):
-        doc.set_footer(doc.make_paragraph("Footer"))
+    @pytest.mark.parametrize("setter", ["set_header", "set_footer"])
+    def test_drawing_the_band_leaves_the_cursor_alone(self, doc, setter):
+        getattr(doc, setter)(doc.make_paragraph("Band"))
         before = doc.cursor.depth
         doc.draw_header_footer()
         assert doc.cursor.depth == before
+
+    def test_header_stands_right_above_the_first_block(self, out, stylesheet):
+        """1.2.0 hung the header from the line the cursor starts on: both overprinted."""
+        doc = PDFMaker(out, top=25, stylesheet=stylesheet)
+        doc.set_header(doc.make_paragraph("HEADER TEXT"))
+        first = doc.draw_paragraph("FIRST BLOCK")
+        doc.save()
+        lines = baselines(out)
+        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(first.height)
+
+    def test_header_lies_in_the_top_margin(self, out, stylesheet):
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_header(doc.make_paragraph("HEADER TEXT"))
+        doc.save()
+        assert doc.y_top < baselines(out)["HEADER TEXT"] < doc.height
+
+    def test_footer_lies_in_the_bottom_margin(self, out, stylesheet):
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_footer(doc.make_paragraph("FOOTER TEXT"))
+        doc.save()
+        assert 0 < baselines(out)["FOOTER TEXT"] < doc.y_bottom
+
+    def test_header_space_after_widens_the_gap(self, out, stylesheet):
+        add_style(stylesheet, "Header", spaceAfter=6)
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_header(doc.make_paragraph("HEADER TEXT", "Header"))
+        first = doc.draw_paragraph("FIRST BLOCK")
+        doc.save()
+        lines = baselines(out)
+        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(first.height + 6)
+
+    def test_header_taller_than_the_top_margin_is_logged(self, out, stylesheet, picture, caplog):
+        doc = PDFMaker(out, top=10, stylesheet=stylesheet)
+        doc.set_header(doc.make_image(picture, height=40))
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.save()
+        assert "Header taller than the top margin" in caplog.text
+
+    def test_footer_taller_than_the_bottom_margin_is_logged(self, out, stylesheet, picture, caplog):
+        doc = PDFMaker(out, bottom=10, stylesheet=stylesheet)
+        doc.set_footer(doc.make_image(picture, height=40))
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.save()
+        assert "Footer taller than the bottom margin" in caplog.text
+
+    def test_bands_that_fit_their_margins_log_nothing(self, out, stylesheet, caplog):
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_header(doc.make_paragraph("HEADER TEXT"))
+        doc.set_footer(doc.make_paragraph("FOOTER TEXT"))
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.save()
+        assert caplog.records == []
 
 
 class TestTables:

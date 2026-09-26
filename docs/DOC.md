@@ -447,8 +447,38 @@ doc.set_footer(doc.make_paragraph("Revision of 25 August 2026", "Right"))
 doc.set_header([logo, doc.make_paragraph("Acme Ltd", "Centered")])
 ```
 
-The footer sits on the bottom edge of the content area, the header on the top
-edge. Both are drawn by `new_page()` and by `save()`.
+Both live in the margins, which leaves the content area to the flow. The header
+stands on the top edge of the content area, in the top margin. The footer hangs
+from its bottom edge, in the bottom margin. The cursor starts right under the
+header. Both are drawn by `new_page()` and by `save()`.
+
+```text
+┌──────────────────────────────┐
+│ top margin       HEADER      │
+├──── top of the content ──────┤ ← the cursor starts here
+│ the flow                     │
+├──── bottom of the content ───┤
+│ bottom margin    FOOTER      │
+└──────────────────────────────┘
+```
+
+So the margins are all the room they get. Give the header a `top` margin tall
+enough for it, and the footer a `bottom` margin: anything that sticks out past
+the edge of the page is logged as a warning. The gap between them and the
+content comes from their style: the header's `spaceAfter`, the footer's
+`spaceBefore`.
+
+```python
+styles = make_stylesheet()
+add_style(styles, "Header", parent="Small", spaceAfter=6)
+
+doc = PDFMaker("output.pdf", top=25, stylesheet=styles)
+doc.set_header(doc.make_paragraph("Acme Ltd — quarterly report", "Header"))
+```
+
+When a header or footer holds several flowables, they all line up on the same
+edge instead of stacking. That is how a logo on the left and a centred title
+share one band.
 
 `doc.header` and `doc.footer` are plain lists; you may assign to them directly.
 

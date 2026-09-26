@@ -16,11 +16,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   end of the `with` block, and is left open, positioned after the PDF: call
   `seek(0)` before reading it back. Anything that is neither a path nor a file
   object raises `TypeError` at construction, instead of becoming a file name.
+- **The header no longer overprints the first block.** `set_header` hung the
+  header from the top edge of the content area. That is the line the cursor
+  starts from, so the first element laid down in flow landed on top of it. The
+  header now stands on that edge, in the top margin. This mirrors the footer,
+  which hangs from the bottom edge into the bottom margin, and leaves the
+  content area to the flow.
+
+  Every document with a header will see it move up by its own height. Make sure
+  the `top` margin is tall enough for it, and remove any offset you added to
+  push the flow clear of it. The header style's `spaceAfter` sets the gap above
+  the content, as the footer's `spaceBefore` already did below it.
 
 ### Added
 
 - `OutputLike`, the type of `PDFMaker`'s first argument, and `Writable`, the
   protocol a file object has to meet: a `write` method that takes bytes.
+- A warning in the log when the header is taller than the top margin, or the
+  footer taller than the bottom margin, since the edge of the page cuts it off.
 
 ## [1.2.0] — 2026-09-01
 

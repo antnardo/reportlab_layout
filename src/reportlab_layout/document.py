@@ -447,11 +447,11 @@ class PDFMaker:
     # Header and footer
     # ------------------------------------------------------------------
     def set_header(self, content: Flowable | Iterable[Flowable] | None) -> None:
-        """Set the header redrawn on every page."""
+        """Set the header redrawn on every page, in the top margin."""
         self.header = self._as_flowables(content)
 
     def set_footer(self, content: Flowable | Iterable[Flowable] | None) -> None:
-        """Set the footer redrawn on every page."""
+        """Set the footer redrawn on every page, in the bottom margin."""
         self.footer = self._as_flowables(content)
 
     @staticmethod
@@ -465,12 +465,31 @@ class PDFMaker:
     def draw_header_footer(self) -> None:
         """Draw the header and footer on the current page.
 
+        Both live in the margins and leave the content area to the flow: the
+        footer hangs from its bottom edge, the header stands on its top edge,
+        the line the cursor starts from. Reserving the header's height inside
+        the area instead would shrink it behind the caller's back, and a ``y=``
+        depth could still land on the header. The margin has to be tall enough:
+        whatever sticks out past the page edge is logged.
+
+        The gap to the content is the header style's ``spaceAfter`` and the
+        footer's ``spaceBefore``. Several flowables share one edge rather than
+        stacking: a logo on the left and a centred title make a single band.
+
         Called for you by :meth:`new_page` and :meth:`save`.
         """
         for flowable in self._as_flowables(self.footer):
-            self.draw(flowable, y=self.bottom_depth / self.unit, page_break=False)
+            box = self.draw(flowable, y=self.bottom_depth / self.unit, page_break=False)
+            if box.y < 0:
+                logger.warning("Footer taller than the bottom margin: %.1f pt off the page", -box.y)
+        top_edge = self.geometry.depth_to_y(self.top)
         for flowable in self._as_flowables(self.header):
-            self.draw(flowable, y=self.top / self.unit, page_break=False)
+            box = self.draw(
+                flowable, x=self.left, y=top_edge + flowable.getSpaceAfter(), absolute=True, page_break=False
+            )
+            if box.top > self.geometry.height:
+                overflow = box.top - self.geometry.height
+                logger.warning("Header taller than the top margin: %.1f pt off the page", overflow)
 
     # ------------------------------------------------------------------
     # Frames
