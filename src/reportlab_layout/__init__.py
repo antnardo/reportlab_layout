@@ -16,7 +16,7 @@ exact point.
 
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
-from reportlab_layout.columns import Packing, Placement, balanced_height, pack_columns
+from reportlab_layout.columns import Packing, Placement, balanced_height, keep_with_next, pack_columns
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.document import OutputLike, PDFMaker, Writable
 from reportlab_layout.fonts import register_font_family
@@ -71,6 +71,7 @@ __all__ = [
     "font_height",
     "image_spec",
     "inline_image",
+    "keep_with_next",
     "load_image",
     "make_stylesheet",
     "pack_columns",

@@ -16,7 +16,10 @@ not loaded a dozen times, and the drawing uses the very same packing.
 Between flowables, space before and after is kept as a frame keeps it: none at
 the top of a column, and none counted at its bottom. A ``FrameBreak`` in the
 story ends its column, as in platypus; a ``KeepTogether`` moves its content to
-the next column when it does not fit in what is left of this one.
+the next column when it does not fit in what is left of this one. A flowable
+whose style asks ``keepWithNext`` -- a heading -- is kept with the next one, as
+a ``SimpleDocTemplate`` keeps it: platypus does that in the document template,
+which the columns do without, so they group such runs themselves.
 
 A flowable that cannot split and is taller than a whole column is laid down
 anyway, overflowing its column, and reported in the log: it is neither lost nor
@@ -28,10 +31,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import Flowable
+from reportlab.platypus import Flowable, KeepTogether
 from reportlab.platypus.doctemplate import ActionFlowable
 
-__all__ = ["Packing", "Placement", "balanced_height", "pack_columns"]
+__all__ = ["Packing", "Placement", "balanced_height", "keep_with_next", "pack_columns"]
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def pack_columns(
     column is laid down anyway, overflowing it: meant for columns as tall as the
     page, where waiting for more room would never end.
     """
-    queue = list(story)
+    queue = keep_with_next(story)
     placements: list[Placement] = []
     for column in range(columns):
         depth = 0.0
@@ -114,6 +117,11 @@ def pack_columns(
                 queue.pop(0)
                 continue
             parts = head.splitOn(canvas, width, room) if room > _FUZZ else []
+            if at_top:
+                # A KeepTogether too tall for the column asks for a break first: at the
+                # top of a column, that would only leave the column empty.
+                while parts and isinstance(parts[0], ActionFlowable):
+                    parts.pop(0)
             if len(parts) > 1 and _fits(canvas, parts[0], width, room):
                 queue[0:1] = parts
                 continue
@@ -131,6 +139,26 @@ def pack_columns(
             break
     reached = max((placement.bottom for placement in placements), default=0.0)
     return Packing(tuple(placements), tuple(queue), reached)
+
+
+def keep_with_next(story: Sequence[Flowable]) -> list[Flowable]:
+    """The story with each run of ``keepWithNext`` flowables bound to the next one.
+
+    Each run and the flowable after it become one ``KeepTogether``, as
+    ``BaseDocTemplate.handle_keepWithNext`` makes them: a heading never ends a
+    column with its text in the next one, unless the whole group is taller than
+    a column.
+    """
+    grouped: list[Flowable] = []
+    run: list[Flowable] = []
+    for flowable in story:
+        run.append(flowable)
+        if isinstance(flowable, ActionFlowable) or not flowable.getKeepWithNext():
+            grouped.append(run[0] if len(run) == 1 else KeepTogether(run))
+            run = []
+    if run:
+        grouped.append(run[0] if len(run) == 1 else KeepTogether(run))
+    return grouped
 
 
 def _fits(canvas: Canvas, flowable: Flowable, width: float, room: float) -> bool:

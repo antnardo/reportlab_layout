@@ -9,7 +9,7 @@ from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import FrameBreak, KeepTogether, Paragraph
 from reportlab.platypus.flowables import Flowable
 
-from reportlab_layout import PDFMaker, balanced_height, pack_columns
+from reportlab_layout import PDFMaker, balanced_height, keep_with_next, pack_columns
 
 STYLE = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=12)
 
@@ -80,6 +80,20 @@ class TestPackColumns:
         kept = [p for p in packing.placements if p.column == 1]
         assert kept and not packing.rest
 
+    def test_heading_kept_with_the_next_flowable(self, canvas):
+        heading = ParagraphStyle("heading", parent=STYLE, keepWithNext=1)
+        story = [*lines(4), Paragraph("Heading", heading), *lines(3, "after")]
+        packing = pack_columns(canvas, story, 100, 60, 2)
+        # Room for the heading at the foot of the first column, not for its text too.
+        assert [p.column for p in packing.placements][:5] == [0, 0, 0, 0, 1]
+        assert packing.placements[4].top == 0
+
+    def test_group_taller_than_a_column_does_not_leave_it_empty(self, canvas):
+        heading = ParagraphStyle("heading", parent=STYLE, keepWithNext=1)
+        story = [Paragraph(f"heading {n}", heading) for n in range(8)] + lines(2)
+        packing = pack_columns(canvas, story, 100, 60, 2)
+        assert {p.column for p in packing.placements} == {0, 1}
+
     def test_space_before_dropped_at_the_top_of_a_column(self, canvas):
         story = [*lines(5), Paragraph("spaced", ParagraphStyle("s", parent=STYLE, spaceBefore=30))]
         packing = pack_columns(canvas, story, 100, 60, 2)
@@ -96,6 +110,18 @@ class TestPackColumns:
     def test_without_overflow_a_block_too_tall_waits(self, canvas):
         packing = pack_columns(canvas, [Block(50, 200), *lines(2)], 100, 60, 2)
         assert packing.placements == () and len(packing.rest) == 3
+
+
+class TestKeepWithNext:
+    def test_runs_bound_to_the_next_flowable(self):
+        heading = ParagraphStyle("heading", parent=STYLE, keepWithNext=1)
+        story = [Paragraph("a", heading), Paragraph("b", heading), *lines(2)]
+        grouped = keep_with_next(story)
+        assert [type(f).__name__ for f in grouped] == ["KeepTogether", "Paragraph"]
+
+    def test_story_without_headings_unchanged(self):
+        story = lines(3)
+        assert keep_with_next(story) == story
 
 
 class TestBalancedHeight:
