@@ -89,7 +89,7 @@ doc.advance(30)                                              # the cursor follow
 
 ### The landscape
 
-| Tool | Model | System deps | Licence | Status (August 2026) |
+| Tool | Model | System deps | Licence | Status (September 2026) |
 | --- | --- | --- | --- | --- |
 | [reportlab](https://pypi.org/project/reportlab/) canvas | absolute, points | no | BSD | 5.0.1, very active |
 | reportlab platypus | flow, flowables | no | BSD | same |
@@ -98,7 +98,7 @@ doc.advance(30)                                              # the cursor follow
 | [pdfino](https://pypi.org/project/pdfino/) | platypus wrapper | no | MIT | 0.1.0, 2023 |
 | [pdfdocument](https://pypi.org/project/pdfdocument/) | platypus wrapper | no | BSD | 4.0.0, 2020 |
 | [borb](https://pypi.org/project/borb/) | object model | no | AGPL-3.0 | 3.0.9, active |
-| [WeasyPrint](https://pypi.org/project/weasyprint/) | HTML + CSS | no | BSD | 69.0, very active |
+| [WeasyPrint](https://pypi.org/project/weasyprint/) | HTML + CSS | no | BSD | 70.0, very active |
 | [pdfme](https://pypi.org/project/pdfme/) | document as a dict | no | MIT | 0.5.0 |
 | [rst2pdf](https://pypi.org/project/rst2pdf/) | reStructuredText | no | MIT | 0.105, active |
 | pypdf / pikepdf | manipulation, not generation | no | BSD / MPL | active |

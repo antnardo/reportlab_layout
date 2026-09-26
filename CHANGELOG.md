@@ -60,6 +60,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   A table or an image has no capitals, and refuses `cap` with a `ValueError`
   rather than falling back to `middle`.
 - `scripts/paragraph_cap_probe.py`, which measures these figures again.
+
 ### Changed
 
 - An unknown `valign` in absolute mode raises `ValueError`, as an unknown

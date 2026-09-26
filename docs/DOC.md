@@ -753,6 +753,41 @@ only wrap and split the flowables: nothing is drawn until the last, and an image
 is not loaded at every trial. `pack_columns` and `balanced_height`, which do the
 work, are public, for columns inside a frame of your own.
 
+### Packing columns yourself
+
+```python
+from reportlab_layout import balanced_height, pack_columns
+
+height = balanced_height(doc.canvas, story, width, room, columns=2)
+packing = pack_columns(doc.canvas, story, width, height, columns=2)
+for placement in packing.placements:
+    placement.flowable.drawOn(doc.canvas, x + placement.column * pitch, y - placement.bottom)
+```
+
+`pack_columns` draws nothing: it wraps the flowables, splits them where a column
+ends, and returns a `Packing`.
+
+| `Packing` | |
+| --- | --- |
+| `placements` | the flowables that fit, each as a `Placement` |
+| `rest` | what is left over, for the next page |
+| `height` | the depth the lowest flowable reaches, its space after left out |
+
+| `Placement` | |
+| --- | --- |
+| `flowable` | the flowable, already wrapped — and split, where it had to be |
+| `column` | which column it landed in, counting from 0 |
+| `top` | the depth of its top below the top of the columns |
+| `width`, `height` | what it wrapped to |
+| `bottom` | `top + height`, for convenience |
+
+Both are frozen dataclasses. Depths grow downwards, like the cursor's, so a
+canvas ordinate is `top_of_the_columns - placement.top`.
+
+`overflow=True` lays down a flowable that cannot split and does not fit an empty
+column anyway, rather than leaving it in `rest` for ever — what `draw_columns`
+does for columns as tall as the page.
+
 ## Page "x of y" numbering
 
 Since the page count is only known at the end, you need a canvas that records
