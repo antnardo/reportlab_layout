@@ -78,6 +78,10 @@ doc.advance(30)                                              # the cursor follow
   cursor depth goes down; `PageGeometry` is the only place that converts.
 - **Nothing leaks.** Every drawing is wrapped in `saveState`/`restoreState`, so
   a colour or a line width never contaminates the next call.
+- **What a report needs and reportlab lacks.** Columns that carry on from page
+  to page and end level, as LaTeX's `multicols` does; TrueType families whose
+  bold and italic work in markup; images set on the baseline, for formulas
+  typeset elsewhere; a tag flush right on the last line of a paragraph.
 - **Two dependencies**, reportlab and Pillow. No headless browser, no LaTeX, no
   system binary.
 
@@ -169,7 +173,8 @@ you still want to write text as it comes, without counting points by hand.
 ## Going further
 
 - [`docs/DOC.md`](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md) — the full API
-  reference: coordinate systems, placement, styles, metrics, frames, pagination.
+  reference: coordinate systems, placement, styles, metrics, fonts, inline
+  images, frames, columns, pagination.
 - [`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py) — a one-page
   document, flow and absolute drawing mixed.
 - [`scripts/centering_proof.py`](https://github.com/antnardo/reportlab_layout/blob/main/scripts/centering_proof.py) — the visual

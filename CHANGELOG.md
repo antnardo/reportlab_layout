@@ -3,6 +3,46 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **TrueType font families.** `register_font_family(name, regular, bold=…,
+  italic=…, bold_italic=…)` registers the faces of a family together and tells
+  reportlab which is which, so that `<b>` and `<i>` switch faces inside a
+  paragraph instead of failing with "Can't map determine family/bold/italic".
+  The standard fonts stop at Latin-1; a TrueType font draws ł, ș, Greek or
+  arrows, and embeds them so the text extracts. A face left out falls back on
+  the closest one given. Registering again with the same files does nothing,
+  with others raises `ValueError`, as does the name of a standard font. A face
+  whose OS/2 table has no cap height, for which reportlab uses the ascent and
+  `valign="cap"` sits too low, is reported in the log.
+- **Images inside a line.** `inline_image(path, width, height, depth=…)` writes
+  the `<img/>` tag of an image standing on the baseline, its depth below: a
+  formula typeset by TeX lines up with the text around it, where reportlab's
+  default puts every image 0.2 em below the baseline.
+- **`InlineParagraph`**, a `Paragraph` whose lines make room for the images
+  they hold. With `autoLeading`, reportlab still hangs the first baseline one
+  type size below the top of the block, so a tall image on the first line stuck
+  out above the paragraph and overprinted the block before it. And when a wrap
+  puts an image at the head of a line, reportlab's `breakLines` gives that line
+  the extent of its font, not of the image, which then overprinted the block
+  below. Both are corrected; an ordinary paragraph is drawn exactly as before.
+  `baselines()` gives the baseline of every line as drawn.
+- **`TaggedParagraph`**, a paragraph with a tag set flush right on its last
+  line, like LaTeX's `\hfill` — the points of a question, a reference. The tag
+  takes a line of its own when the last one is full, and goes with the last
+  part when the paragraph splits.
+- **Columns.** `PDFMaker.draw_columns(story, columns=2, gap=4)` flows a story
+  over columns from the cursor, fills page after page, and balances the columns
+  on the last one, as LaTeX's `multicols` does, before the cursor moves under
+  them. `FrameBreak` ends a column, `KeepTogether` is honoured, and a block too
+  tall for a column overflows it with a warning instead of looping. A heading
+  whose style asks `keepWithNext` stays with what follows it, as in a
+  `SimpleDocTemplate` (`keep_with_next`). The packing behind it,
+  `pack_columns` and `balanced_height`, only wraps and splits: the balancing
+  trials draw nothing.
+
 ## [1.4.0] — 2026-09-26
 
 ### Added
@@ -20,7 +60,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   A table or an image has no capitals, and refuses `cap` with a `ValueError`
   rather than falling back to `middle`.
 - `scripts/paragraph_cap_probe.py`, which measures these figures again.
-
 ### Changed
 
 - An unknown `valign` in absolute mode raises `ValueError`, as an unknown

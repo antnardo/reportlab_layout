@@ -9,12 +9,16 @@
 - [Laying down flowables](#laying-down-flowables)
 - [Drawing text](#drawing-text)
 - [Font metrics](#font-metrics)
+- [TrueType fonts](#truetype-fonts)
 - [Shapes](#shapes)
 - [Images](#images)
+- [Images inside a line](#images-inside-a-line)
+- [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
 - [Styles](#styles)
 - [Header and footer](#header-and-footer)
 - [Pagination](#pagination)
 - [Frames](#frames)
+- [Columns](#columns)
 - [Page "x of y" numbering](#page-x-of-y-numbering)
 - [Debugging a layout](#debugging-a-layout)
 - [Migrating from `pdf_maker`](#migrating-from-pdf_maker)
@@ -422,6 +426,46 @@ ascent as a last resort.
 `doc.metrics(style, scale)` returns the same object, resolving the style against
 the document's stylesheet.
 
+## TrueType fonts
+
+The fourteen standard fonts stop at Latin-1: a Polish ł, a Romanian ș, a Greek
+letter or an arrow come out as black boxes. A TrueType font covers them, and
+embeds its glyphs, so the text still extracts. `register_font_family` registers
+the faces of a family together, and tells reportlab which is which, so that
+`<b>` and `<i>` switch faces inside a paragraph:
+
+```python
+from reportlab_layout import add_style, register_font_family
+
+family = register_font_family(
+    "Gentium",
+    "fonts/Gentium-Regular.ttf",
+    bold="fonts/Gentium-Bold.ttf",
+    italic="fonts/Gentium-Italic.ttf",
+    bold_italic="fonts/Gentium-BoldItalic.ttf",
+)
+add_style(doc.stylesheet, "Body", fontName=family, fontSize=10.5, leading=13)
+doc.draw_paragraph("Łódź, <b>Brașov</b>, <i>Ελλάδα</i>", "Body")
+```
+
+The faces are registered as `Gentium`, `Gentium-Bold`, `Gentium-Italic` and
+`Gentium-BoldItalic`, names a `draw_string` style can use too. A face left out
+takes the closest one given: bold and italic the regular face, bold italic the
+bold, else the italic, else the regular.
+
+Registering the same family again with the same files does nothing, so a module
+can do it when imported; with other files, or under the name of a standard font,
+it raises `ValueError` rather than change documents already using the name.
+
+Two limits come from reportlab:
+
+- only TrueType outlines are read: an OpenType font with PostScript outlines
+  (CFF, the usual `.otf`) has to be converted first;
+- the cap height comes from the font's OS/2 table, and a table older than
+  version 2 has none: reportlab then uses the ascent, which drops `valign="cap"`
+  far too low. Such a face is reported in the log; centre its labels with
+  `middle`.
+
 ## Shapes
 
 Canvas coordinates, in points. Every call returns a `Box` and leaves no state
@@ -493,6 +537,72 @@ doc.draw_image(spec, width=width, wscale=width / doc.content_width, halign="cent
 ```
 
 The same goes for a table narrower than the content width.
+
+## Images inside a line
+
+reportlab takes an `<img/>` tag in a paragraph's markup, but stands the image
+0.2 em below the baseline, wherever the image's own baseline is. That suits an
+icon, not text turned into an image — a formula typeset by TeX, a word in
+another script — which has to sit on the line's baseline, its depth below it.
+`inline_image` writes the tag that does that:
+
+```python
+from reportlab_layout import InlineParagraph, add_style, inline_image
+
+formula = inline_image("formula.png", width=31.2, height=12.4, depth=3.1)
+add_style(doc.stylesheet, "Body", fontSize=10, leading=12, autoLeading="max")
+doc.draw(InlineParagraph(f"Hence {formula}, as expected.", doc.stylesheet["Body"]))
+```
+
+`width`, `height` and `depth` are in points; given one dimension only, the file
+is read for its aspect ratio.
+
+The line has to make room for a tall image, which takes `autoLeading="max"` on
+the style: without it, the image overprints the line above. With a plain
+`Paragraph`, that is not enough, for two reasons that `InlineParagraph`
+corrects:
+
+- reportlab hangs the first baseline one type size below the top of the block,
+  whatever the line holds, so a formula on the **first** line sticks out above
+  the paragraph by its extra height, over the block before it, while the same
+  amount is left empty at the bottom. `InlineParagraph` lowers the paragraph by
+  that much when it draws;
+- when a wrap puts an image at the **head** of a line, reportlab's
+  `breakLines` gives the line the ascent and descent of its font, not of the
+  image, which then overprints the block below. `InlineParagraph` measures each
+  line again from its words.
+
+An ordinary paragraph, with no image and no size change, is drawn exactly as
+reportlab draws it.
+
+`InlineParagraph.baselines()` gives the baseline of every line as drawn, above
+the bottom of the block, once the paragraph is wrapped.
+
+## A tag at the end of a paragraph
+
+`TaggedParagraph` sets a tag flush right on the last line, as LaTeX does with
+`\hfill` at the end of a paragraph: the points of an exam question, a
+reference, a page number. When the last line has no room left, the tag goes on
+a line of its own, still flush right.
+
+```python
+from reportlab.lib.styles import ParagraphStyle
+from reportlab_layout import TaggedParagraph
+
+points = ParagraphStyle("points", fontName="Courier-Bold", fontSize=7)
+question = TaggedParagraph("Show that the energy is conserved.", doc.stylesheet["Body"], tag="(2 pts)", tag_style=points)
+doc.draw(question)
+```
+
+The tag is markup, in its own style — the paragraph's by default. `gap` is the
+least room kept between the text and the tag, half the type size by default.
+The paragraph splits across columns and pages as any other; the tag goes with
+its last part. It builds on `InlineParagraph`, so inline images are welcome, and
+a bullet too: with `bulletAnchor="end"`, the bullet hangs flush right in the
+indent, as a LaTeX `\item[label]` does.
+
+The text is meant to be aligned left or justified: a centred or right-aligned
+last line has no free end for the tag.
 
 ## Styles
 
@@ -605,6 +715,43 @@ rather than vanishing silently. `new_frame` moves the cursor down by the frame's
 height.
 
 `doc.draw_frame(story, space=0)` writes a list of flowables in one go.
+
+## Columns
+
+`draw_columns` flows a story over columns, from the cursor, onto as many pages
+as it takes:
+
+```python
+story = [doc.make_paragraph(text, "Body") for text in answers]
+box = doc.draw_columns(story, columns=2, gap=5)
+doc.draw_paragraph("Below the columns, across the whole width.")
+```
+
+`gap` is the space between two columns, in `unit`. Every page but the last is
+filled down to the bottom margin, then a new page is opened, header and footer
+drawn as usual. On the last page, the columns are **balanced**, as LaTeX's
+`multicols` balances them: the lowest height at which the rest of the story
+still fits, so they end level rather than one full and one short. The cursor
+then moves under them, and the box they cover on that page is returned.
+`balance=False` fills the first column first, to the bottom of the page.
+
+- Space before and after is kept as a frame keeps it: none at the top of a
+  column, none counted at its bottom.
+- A `FrameBreak` in the story ends its column; a `KeepTogether` moves its
+  content to the next column when it does not fit in what is left of this one.
+- A flowable whose style asks `keepWithNext` — a heading — stays with the next
+  one, as in a `SimpleDocTemplate`: platypus does that in its document
+  template, so the columns bind such runs themselves (`keep_with_next`).
+- When nothing fits in what is left of the page, the columns start on the next
+  one.
+- A flowable that cannot split and is taller than a whole column is laid down
+  anyway, overflowing it, and reported in the log: neither lost, nor an endless
+  loop.
+
+The balanced height is found by trying heights, a dozen times or so. The trials
+only wrap and split the flowables: nothing is drawn until the last, and an image
+is not loaded at every trial. `pack_columns` and `balanced_height`, which do the
+work, are public, for columns inside a frame of your own.
 
 ## Page "x of y" numbering
 
