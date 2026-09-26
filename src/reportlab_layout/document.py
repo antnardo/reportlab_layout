@@ -29,6 +29,7 @@ from reportlab.platypus import paragraph as platypus_paragraph
 
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
+from reportlab_layout.columns import Packing, balanced_height, pack_columns
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import PageGeometry
@@ -494,6 +495,72 @@ class PDFMaker:
         line_y = self.geometry.depth_to_y(depth)
         x1 = self.left + (1 - wscale) * self.content_width / 2
         return self.shapes.line(x1, line_y, x1 + wscale * self.content_width, line_y, **kwargs)
+
+    # ------------------------------------------------------------------
+    # Columns
+    # ------------------------------------------------------------------
+    def draw_columns(
+        self,
+        story: Iterable[Flowable],
+        *,
+        columns: int = 2,
+        gap: float = 4,
+        balance: bool = True,
+        show_boundary: bool | None = None,
+    ) -> Box:
+        """Flow a story over columns, from the cursor, onto as many pages as it takes.
+
+        ``gap`` is the space between two columns, in ``unit``. Every page but
+        the last is filled to its bottom margin, then a new page is opened, with
+        its header and footer; on the last, the columns are balanced to end
+        level, unless ``balance`` is false. The cursor moves under the columns,
+        whose box on that last page is returned. See
+        :mod:`reportlab_layout.columns`.
+
+        When nothing fits in what is left of the page, the columns start on the
+        next one, as a block too tall for the page would.
+        """
+        if columns < 1:
+            raise ValueError(f"columns must be at least 1, got {columns}")
+        spacing = gap * self.unit
+        width = (self.content_width - (columns - 1) * spacing) / columns
+        if width <= 0:
+            raise ValueError(f"No room for {columns} columns {gap} apart in {self.content_width:.1f} pt")
+        outline = self.show_boundaries if show_boundary is None else show_boundary
+        queue = list(story)
+        while True:
+            room = self.remaining_height
+            at_top = self.cursor.depth <= self.cursor.top + 1e-6
+            packing = pack_columns(self.canvas, queue, width, room, columns, overflow=at_top)
+            if packing.rest and not packing.placements and not at_top:
+                self.new_page()
+                continue
+            if not packing.rest:
+                if balance and columns > 1 and packing.height > 0:
+                    level = balanced_height(self.canvas, queue, width, packing.height, columns)
+                    balanced = pack_columns(self.canvas, queue, width, level, columns, overflow=at_top)
+                    if not balanced.rest:
+                        packing = balanced
+                top = self.cursor_y
+                self._draw_packing(packing, top, width, spacing, packing.height, outline)
+                self.cursor.advance(packing.height)
+                return Box(self.left, top - packing.height, self.content_width, packing.height)
+            self._draw_packing(packing, self.cursor_y, width, spacing, room, outline)
+            self.new_page()
+            queue = list(packing.rest)
+
+    def _draw_packing(
+        self, packing: Packing, top: float, width: float, spacing: float, height: float, outline: bool
+    ) -> None:
+        """Draw what :func:`pack_columns` laid out, the columns' top at canvas ordinate ``top``."""
+        columns = {placement.column for placement in packing.placements}
+        for placement in packing.placements:
+            x = self.left + placement.column * (width + spacing)
+            y = top - placement.top - placement.height
+            placement.flowable.drawOn(self.canvas, x, y, _sW=width - placement.width)
+        if outline:
+            for column in sorted(columns):
+                self.shapes.rect(self.left + column * (width + spacing), top - height, width, height)
 
     # ------------------------------------------------------------------
     # Header and footer

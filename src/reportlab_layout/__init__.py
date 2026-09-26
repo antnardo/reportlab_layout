@@ -16,11 +16,13 @@ exact point.
 
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
+from reportlab_layout.columns import Packing, Placement, balanced_height, pack_columns
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.document import OutputLike, PDFMaker, Writable
+from reportlab_layout.fonts import register_font_family
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import Margins, PageGeometry, resolve_pagesize
-from reportlab_layout.images import ImageSpec, image_spec, load_image
+from reportlab_layout.images import ImageSpec, image_spec, inline_image, load_image
 from reportlab_layout.metrics import (
     TextMetrics,
     baseline_offset,
@@ -31,6 +33,7 @@ from reportlab_layout.metrics import (
     string_width,
 )
 from reportlab_layout.numbering import NumberedCanvas
+from reportlab_layout.paragraphs import InlineParagraph, TaggedParagraph
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, add_style, make_stylesheet, resolve_style
 from reportlab_layout.text import TextPainter
@@ -44,26 +47,34 @@ __all__ = [
     "Cursor",
     "FrameWriter",
     "ImageSpec",
+    "InlineParagraph",
     "Margins",
     "NumberedCanvas",
     "OutputLike",
     "PDFMaker",
+    "Packing",
     "PageGeometry",
+    "Placement",
     "ShapePainter",
     "StyleLike",
+    "TaggedParagraph",
     "TextMetrics",
     "TextPainter",
     "Writable",
     "__version__",
     "add_style",
+    "balanced_height",
     "baseline_offset",
     "cap_height",
     "font_ascent",
     "font_descent",
     "font_height",
     "image_spec",
+    "inline_image",
     "load_image",
     "make_stylesheet",
+    "pack_columns",
+    "register_font_family",
     "resolve_pagesize",
     "resolve_style",
     "string_width",
