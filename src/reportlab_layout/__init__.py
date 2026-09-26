@@ -35,7 +35,7 @@ from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, add_style, make_stylesheet, resolve_style
 from reportlab_layout.text import TextPainter
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = [
     "STYLES",
