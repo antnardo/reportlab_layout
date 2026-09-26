@@ -22,6 +22,12 @@ FLAT_CAPITALS = "THE FILM KIT HELIX TIME EXIT MYTH ITEM LIFE THEME TILE"
 #: The page the capitals are centred on, in points.
 PAGE = (250, 120)
 
+#: How far from y the ink may land, in points. The measure is good to 0.06 pt;
+#: the rest is the font poppler draws with. Linux has the URW clones, whose
+#: Nimbus Sans stands its capitals at 729 thousandths of an em where Helvetica
+#: has 718: that lifts the ink by 0.11 pt at 20 pt.
+INK_TOLERANCE = 0.2
+
 
 def read(path):
     return PdfReader(str(path))
@@ -181,7 +187,7 @@ class TestCapAnchor:
     def test_ink_is_centred_on_y_whatever_the_leading(self, out, ink, font, size, leading):
         centre_on_page(out, font, size, leading)
         bottom, top = ink(out)
-        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2, abs=0.1)
+        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2, abs=INK_TOLERANCE)
 
     @pytest.mark.ink
     def test_middle_leaves_capitals_set_solid_low(self, out, ink):
@@ -189,7 +195,7 @@ class TestCapAnchor:
         metrics = centre_on_page(out, "Helvetica", 15, 15, valign="middle")
         bottom, top = ink(out)
         sink = (metrics.font_size - metrics.cap_height) / 2
-        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2 - sink, abs=0.1)
+        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2 - sink, abs=INK_TOLERANCE)
 
     def test_one_line_shares_the_baseline_of_draw_string(self, out, stylesheet):
         """A one-line title and a label anchored the same way line up."""

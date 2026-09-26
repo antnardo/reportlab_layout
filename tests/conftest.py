@@ -49,8 +49,9 @@ def ink(tmp_path: Path) -> Callable[[Path], tuple[float, float]]:
     ordinates in points. The ink is what the eye centres: it checks the
     placement and the font metrics together, where reading positions back out
     of the PDF only checks the arithmetic. Needs ``pdftoppm`` (poppler), which
-    renders the standard fonts with whatever clone the system has; the
-    measurements in the documentation were made with the same tool.
+    draws the standard fonts with what the system has: Apple's own on macOS,
+    where the measurements in the documentation were made, and the URW clones
+    on Linux.
     """
     if shutil.which("pdftoppm") is None:
         pytest.skip("pdftoppm (poppler) is not installed")

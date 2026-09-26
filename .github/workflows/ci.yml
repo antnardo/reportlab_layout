@@ -47,9 +47,10 @@ jobs:
 
   ink:
     # The ink tests rasterise pages with pdftoppm, which the runners lack, so
-    # the test job skips them. Poppler substitutes a clone for each standard
-    # font: the URW ones match Adobe's cap heights, where a fallback sans would
-    # move the ink the tests measure.
+    # the test job skips them. Poppler draws each standard font with a clone,
+    # and installing the URW ones makes it a known clone: Nimbus Roman has
+    # Times's cap height, and Nimbus Sans's capitals stand 11 thousandths of an
+    # em above Helvetica's, which the tests allow for.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
