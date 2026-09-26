@@ -8,12 +8,15 @@ files; this script measures it again on the actual rendering to check the table.
 
 Needs ``pdftoppm`` (poppler) on the PATH.
 
-Reading the results: poppler does not have the Adobe fonts and substitutes the
-URW clones. Those match in **advance width**, not necessarily in cap height.
+Reading the results: poppler does not have the Adobe fonts and draws each one
+with what the system offers, which matches in **advance width**, not
+necessarily in cap height. On macOS, fontconfig hands it Apple's own fonts:
 Helvetica lands within 0.4 per mille of the table and Times-Roman within 1.2,
-which validates it; Courier (+18) and the Times variants show the clone's
+which validates it; Courier (+18) and the Times variants show the substitute's
 deviation, not an error in the table -- poppler in fact renders all four Times
-faces with the same value, which means it substitutes a single font.
+faces with the same value, which means it substitutes a single font. On Linux
+it takes the URW clones, and Nimbus Sans stands its capitals at 729, 11 per
+mille above Helvetica: that is the clone's design, per URW's own AFM files.
 """
 
 import subprocess

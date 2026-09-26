@@ -384,7 +384,11 @@ them, rather than quietly falling back to `middle`, which is the anchor to use.
 Like the other anchors, `cap` only applies in absolute mode.
 
 These figures can be measured again with
-[`scripts/paragraph_cap_probe.py`](../scripts/paragraph_cap_probe.py).
+[`scripts/paragraph_cap_probe.py`](../scripts/paragraph_cap_probe.py). They come
+from poppler on macOS, which draws Helvetica and Times with Apple's fonts. On
+Linux it takes the URW clones, whose Nimbus Sans sets its capitals 11
+thousandths of an em higher than Helvetica. The middle of the ink rises by half
+that, 0.11 pt at 20 pt: the viewer's font, not the anchor.
 
 ## Font metrics
 
