@@ -28,6 +28,14 @@ with PDFMaker("report.pdf", top=25, auto_page_break=True) as doc:
     doc.draw_string("Distinction", *doc.cursor_point, halign="left", valign="cap")
 ```
 
+A page drawn by
+[`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py):
+the title, the paragraph and the table flow down the page; the callout is drawn
+on the canvas where the cursor stands, its label centred on the cap height, and
+the flow resumes below it.
+
+![A certificate of enrolment drawn by examples/certificate.py](https://raw.githubusercontent.com/antnardo/reportlab_layout/ad6f4642f562c3c030bf836b9ccb6a5fc455d642/docs/img/certificate.png)
+
 ## The problem it solves
 
 reportlab gives you two ways to work, and they do not mix well.
