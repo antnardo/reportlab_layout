@@ -6,10 +6,21 @@ from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.platypus import paragraph as platypus_paragraph
 
 from conftest import fill_rgb
-from reportlab_layout import Box, PDFMaker, add_style
+from reportlab_layout import Box, PDFMaker, TextMetrics, add_style
+
+#: Capitals whose ink runs from the baseline to the cap height and no further,
+#: in Helvetica as in Times: no bowl overshooting, no point dipping below the
+#: baseline as Times's A, N, V and W do, no punctuation.
+FLAT_CAPITALS = "THE FILM KIT HELIX TIME EXIT MYTH ITEM LIFE THEME TILE"
+
+#: The page the capitals are centred on, in points.
+PAGE = (250, 120)
 
 
 def read(path):
@@ -34,6 +45,30 @@ def baselines(path, index=0):
 
     read(path).pages[index].extract_text(visitor_text=record)
     return found
+
+
+def first_and_last_baselines(path):
+    """The baselines of the top and bottom lines of text on the first page."""
+    found = baselines(path).values()
+    return max(found), min(found)
+
+
+def centre_on_page(path, font, size, leading, valign="cap", **attributes):
+    """Centre FLAT_CAPITALS on the middle of PAGE, then return the style's metrics."""
+    style = ParagraphStyle(
+        "centred", fontName=font, fontSize=size, leading=leading, alignment=TA_CENTER, **attributes
+    )
+    with PDFMaker(path, pagesize=PAGE, unit=1, left=10, right=10, top=5, bottom=5) as doc:
+        doc.draw_paragraph(
+            FLAT_CAPITALS,
+            style,
+            x=doc.x_left,
+            y=PAGE[1] / 2,
+            width=doc.content_width,
+            absolute=True,
+            valign=valign,
+        )
+    return TextMetrics(style)
 
 
 class TestGeometryExport:
@@ -113,6 +148,83 @@ class TestAbsolutePlacement:
     def test_absolute_without_coordinates_is_rejected(self, doc):
         with pytest.raises(ValueError, match="explicit x and y"):
             doc.draw_paragraph("Hello", absolute=True)
+
+    def test_unknown_valign_is_rejected(self, doc):
+        """1.3.0 let a KeyError through instead."""
+        with pytest.raises(ValueError, match="valign must be"):
+            doc.draw_paragraph("Hello", x=100, y=200, width=200, absolute=True, valign="center")
+
+
+#: Set solid, at the usual 1.2, looser, tighter, over three lines, and in Times.
+CAP_STYLES = [
+    pytest.param("Helvetica", 15, 15, id="solid"),
+    pytest.param("Helvetica", 10, 12, id="normal"),
+    pytest.param("Helvetica", 12, 18, id="loose"),
+    pytest.param("Helvetica", 11, 9, id="tight"),
+    pytest.param("Helvetica-Bold", 20, 22, id="three-lines"),
+    pytest.param("Times-Roman", 14, 14, id="times-solid"),
+    pytest.param("Times-Roman", 12, 16, id="times-loose"),
+]
+
+
+class TestCapAnchor:
+    """valign="cap" on a paragraph: the middle of its capitals on y, not the middle of its block."""
+
+    @pytest.mark.parametrize(("font", "size", "leading"), CAP_STYLES)
+    def test_capitals_straddle_y_whatever_the_leading(self, out, font, size, leading):
+        metrics = centre_on_page(out, font, size, leading)
+        first, last = first_and_last_baselines(out)
+        assert (first + metrics.cap_height + last) / 2 == pytest.approx(PAGE[1] / 2, abs=0.01)
+
+    @pytest.mark.ink
+    @pytest.mark.parametrize(("font", "size", "leading"), CAP_STYLES)
+    def test_ink_is_centred_on_y_whatever_the_leading(self, out, ink, font, size, leading):
+        centre_on_page(out, font, size, leading)
+        bottom, top = ink(out)
+        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2, abs=0.1)
+
+    @pytest.mark.ink
+    def test_middle_leaves_capitals_set_solid_low(self, out, ink):
+        """The flaw "cap" corrects: reportlab keeps a whole type size above the first baseline."""
+        metrics = centre_on_page(out, "Helvetica", 15, 15, valign="middle")
+        bottom, top = ink(out)
+        sink = (metrics.font_size - metrics.cap_height) / 2
+        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2 - sink, abs=0.1)
+
+    def test_one_line_shares_the_baseline_of_draw_string(self, out, stylesheet):
+        """A one-line title and a label anchored the same way line up."""
+        with PDFMaker(out, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("TITLE", "Heading2", x=100, y=400, width=200, absolute=True, valign="cap")
+            doc.draw_string("LABEL", 400, 400, style="Heading2", valign="cap")
+        lines = baselines(out)
+        assert lines["TITLE"] == pytest.approx(lines["LABEL"], abs=0.01)
+
+    @pytest.mark.parametrize("auto_leading,leading", [("max", 9), ("min", 20)])
+    def test_auto_leading_pitch_is_followed(self, out, auto_leading, leading):
+        """autoLeading spaces the lines by the font's height, not by the style's leading."""
+        metrics = centre_on_page(out, "Helvetica", 15, leading, autoLeading=auto_leading)
+        first, last = first_and_last_baselines(out)
+        assert (first + metrics.cap_height + last) / 2 == pytest.approx(PAGE[1] / 2, abs=0.01)
+
+    @pytest.mark.parametrize("drop_by_size", [0, 1])
+    def test_first_line_drop_setting_is_followed(self, out, monkeypatch, drop_by_size):
+        """Switched off, paraFontSizeHeightOffset drops the first line by the ascent instead."""
+        monkeypatch.setattr(platypus_paragraph, "paraFontSizeHeightOffset", drop_by_size)
+        metrics = centre_on_page(out, "Times-Roman", 14, 14)
+        first, last = first_and_last_baselines(out)
+        assert (first + metrics.cap_height + last) / 2 == pytest.approx(PAGE[1] / 2, abs=0.01)
+
+    def test_empty_paragraph_lands_on_y(self, doc):
+        box = doc.draw_paragraph("", x=100, y=200, width=200, absolute=True, valign="cap")
+        assert box.y == pytest.approx(200)
+
+    def test_table_is_refused(self, doc):
+        with pytest.raises(ValueError, match="needs a Paragraph, and Table is not one"):
+            doc.draw_table([["a", "b"]], x=100, y=200, absolute=True, valign="cap")
+
+    def test_image_is_refused(self, doc, picture):
+        with pytest.raises(ValueError, match="needs a Paragraph, and Image is not one"):
+            doc.draw_image(picture, width=80, x=100, y=200, absolute=True, valign="cap")
 
 
 class TestPagination:

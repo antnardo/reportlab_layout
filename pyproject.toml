@@ -82,6 +82,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # unicode look-alikes: the prose uses t
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+markers = [
+    "ink: rasterises a page with pdftoppm to measure where the ink lands; skipped without poppler",
+]
 
 [tool.coverage.run]
 source = ["src/reportlab_layout"]

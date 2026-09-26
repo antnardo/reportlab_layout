@@ -3,6 +3,29 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`valign="cap"` for a paragraph placed with `absolute=True`.** `y` is then
+  the middle of its capitals, from the cap height of the first line down to the
+  baseline of the last, where `middle` centres its block. The two are not the
+  same: reportlab hangs the first baseline one type size below the top of the
+  block, so the capitals lie `size − (leading + cap height) / 2` below its
+  middle, whatever the number of lines. Measured on the rendered ink, a
+  Helvetica 15 paragraph set solid lands 2.11 pt low with `middle` and within
+  0.03 pt of the target with `cap`. The line pitch is the one reportlab used,
+  `autoLeading` included.
+
+  A table or an image has no capitals, and refuses `cap` with a `ValueError`
+  rather than falling back to `middle`.
+- `scripts/paragraph_cap_probe.py`, which measures these figures again.
+
+### Changed
+
+- An unknown `valign` in absolute mode raises `ValueError`, as an unknown
+  `halign` does, instead of a bare `KeyError`.
+
 ## [1.3.0] — 2026-09-26
 
 ### Fixed

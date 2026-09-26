@@ -153,7 +153,11 @@ doc.draw_paragraph("40 mm down from the top.", x=20, y=40)
 doc.draw_paragraph("Bottom of the block on y.", x=100, y=200, width=200, absolute=True)
 doc.draw_paragraph("Middle of the block on y.", x=100, y=200, width=200, absolute=True, valign="middle")
 doc.draw_paragraph("Top of the block on y.",    x=100, y=200, width=200, absolute=True, valign="top")
+doc.draw_paragraph("Capitals centred on y.",    x=100, y=200, width=200, absolute=True, valign="cap")
 ```
+
+A paragraph's text does not sit in the middle of its block: `cap` centres the
+capitals instead. See [`cap` on a paragraph](#cap-on-a-paragraph).
 
 ## Laying down flowables
 
@@ -174,7 +178,7 @@ The keywords `draw` shares with all of them:
 | `before` | space added before, in `unit` |
 | `absolute` | raw canvas coordinates |
 | `halign` | `"left"`, `"center"`, `"right"` — works with `wscale` |
-| `valign` | `"bottom"`, `"middle"`, `"top"` — **in absolute mode only** |
+| `valign` | `"bottom"`, `"middle"`, `"top"`, and `"cap"` for a paragraph — **in absolute mode only** |
 | `wscale` | fraction of the content width the block occupies |
 | `page_break` | `None` follows `auto_page_break`; `True`/`False` force it |
 | `show_boundary` | outline the element's box |
@@ -273,6 +277,21 @@ Vertical anchors, `y` meaning:
 | `top` | the top of the em box |
 | `bottom` | the bottom of the em box |
 
+Rotation is clean: the canvas is saved, translated to the anchor, rotated, then
+restored. `angle=90` reads bottom to top.
+
+```python
+doc.draw_string("Week 12", x, y, angle=90, halign="center", valign="cap")
+```
+
+To draw with the canvas yourself, `apply_style` arms the font and colour and
+returns the metrics:
+
+```python
+metrics = doc.apply_style("Heading2", scale=0.8, color="#333333")
+doc.canvas.drawString(x, y, "drawn by hand")
+```
+
 ### `middle` or `cap`?
 
 Both are exact. They simply centre different things.
@@ -315,23 +334,57 @@ These figures can be measured again with
 [`scripts/centering_proof.py`](../scripts/centering_proof.py) and
 [`scripts/cap_height_probe.py`](../scripts/cap_height_probe.py).
 
-`draw_string` does not wrap. For text that has to be laid out, go through
-`draw_paragraph`.
+### `cap` on a paragraph
 
-Rotation is clean: the canvas is saved, translated to the anchor, rotated, then
-restored. `angle=90` reads bottom to top.
-
-```python
-doc.draw_string("Week 12", x, y, angle=90, halign="center", valign="cap")
-```
-
-To draw with the canvas yourself, `apply_style` arms the font and colour and
-returns the metrics:
+`draw_string` does not wrap: text that has to be laid out goes through
+`draw_paragraph`. Placed with `absolute=True`, a paragraph takes `cap` too, and
+`y` is then the middle of its capitals, from the cap height of the first line
+down to the baseline of the last. That is the anchor for a title centred on a
+page or in a banner:
 
 ```python
-metrics = doc.apply_style("Heading2", scale=0.8, color="#333333")
-doc.canvas.drawString(x, y, "drawn by hand")
+doc.draw_paragraph(title, "Heading1 Centered", x=doc.x_left, y=doc.height / 2,
+                   width=doc.content_width, absolute=True, valign="cap")
 ```
+
+`middle` centres the block, but the text does not sit in the middle of its
+block. reportlab hangs the first baseline one type size below the top of the
+block, and leaves `leading − size` under the last one. The capitals therefore
+lie `size − (leading + cap height) / 2` below the middle of the block, however
+many lines there are. Set solid, as a title often is, they sit low by 14% of
+the type size in Helvetica and 17% in Times; under a loose leading they sit
+high instead.
+
+Ink-centre error measured on a paragraph in capitals, centred on a page:
+
+| Style | lines | `middle` | `cap` |
+| --- | --- | --- | --- |
+| Helvetica 15 on 15 | 2 | −2.11 pt | +0.02 pt |
+| Helvetica 10 on 12 | 2 | −0.39 pt | +0.03 pt |
+| Helvetica 12 on 18 | 2 | +1.31 pt | +0.02 pt |
+| Helvetica-Bold 20 on 22 | 3 | −1.80 pt | +0.02 pt |
+| Times-Roman 14 on 14 | 2 | −2.35 pt | +0.02 pt |
+
+The `middle` column matches the formula above to 0.02 pt. In lower case,
+descenders pull the ink below the last baseline: set in the first row's style,
+`Please be wrapped, centered horizontally and vertically!!` lands 3.72 pt low
+with `middle` and 1.59 pt low with `cap`. That is the choice made for
+`September` above: the capitals are the reference. A one-line title anchored
+on `cap` thus gets the baseline of a `draw_string` anchored on `cap` at the
+same `y`, and the two line up.
+
+`cap` works from the paragraph's style, its font and its size, and from the
+line pitch reportlab actually used, `autoLeading` included. reportlab's
+`paraFontSizeHeightOffset` setting, which drops the first line by the ascent
+rather than the size, is followed as well. A size changed by markup inside the
+paragraph, such as `<font size="20">`, is not taken into account.
+
+A table or an image has no capitals: `valign="cap"` raises `ValueError` for
+them, rather than quietly falling back to `middle`, which is the anchor to use.
+Like the other anchors, `cap` only applies in absolute mode.
+
+These figures can be measured again with
+[`scripts/paragraph_cap_probe.py`](../scripts/paragraph_cap_probe.py).
 
 ## Font metrics
 

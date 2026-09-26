@@ -25,6 +25,7 @@ from reportlab.lib.styles import StyleSheet1
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.platypus import Flowable, Frame, Image, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import paragraph as platypus_paragraph
 
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
@@ -80,6 +81,33 @@ def _canvas_target(output: OutputLike) -> str | Writable:
     if callable(getattr(output, "write", None)):
         return output
     raise TypeError(f"Expected a path or a binary file object, got {type(output).__name__}")
+
+
+def _cap_middle(paragraph: Paragraph, height: float) -> float:
+    """Height, above the bottom of its block, of the middle of a wrapped paragraph's capitals.
+
+    The capitals run from the cap height of the first line down to the
+    baseline of the last. reportlab hangs the first baseline one type size
+    below the top of the block and leaves ``leading - size`` under the last, so
+    the middle of that span lies ``size - (leading + cap height) / 2`` below the
+    middle of the block, whatever the number of lines: 2.1 pt low for Helvetica
+    15 set solid, 1.3 pt high for Helvetica 12 on 18.
+
+    The first line drops by the ascent instead of the size when
+    ``paraFontSizeHeightOffset`` is off: the flag is read where reportlab's
+    drawing code reads it. The line pitch is read back from the block rather
+    than from the style, because ``autoLeading`` changes it. The font and size
+    are the style's: a size changed by markup inside the paragraph is not
+    accounted for.
+    """
+    lines = len(paragraph.blPara.lines)
+    if not lines:
+        return height / 2
+    metrics = TextMetrics(paragraph.style)
+    drop = metrics.font_size if platypus_paragraph.paraFontSizeHeightOffset else metrics.ascent
+    first_baseline = height - drop
+    last_baseline = first_baseline - (lines - 1) * height / lines
+    return (first_baseline + metrics.cap_height + last_baseline) / 2
 
 
 class PDFMaker:
@@ -341,7 +369,10 @@ class PDFMaker:
 
         ``valign`` only applies in absolute mode and says what ``y`` refers to:
         the element's bottom (``"bottom"``, the default), its middle
-        (``"middle"``) or its top (``"top"``).
+        (``"middle"``) or its top (``"top"``). A paragraph also takes
+        ``"cap"``, the middle of its capitals, from the cap height of the first
+        line down to the baseline of the last: that is what makes a title look
+        centred. Any other flowable refuses it.
 
         ``page_break`` at ``None`` follows the document's ``auto_page_break``
         setting; ``True`` or ``False`` force it for this call.
@@ -383,12 +414,33 @@ class PDFMaker:
         if absolute:
             if x is None or y is None:
                 raise ValueError("absolute=True needs explicit x and y, in points")
-            offset = {"bottom": 0.0, "middle": actual_height / 2, "top": actual_height}[valign]
+            offset = self._valign_offset(flowable, actual_height, valign)
             return Box(x, y - offset, actual_width, actual_height)
         anchor_x, anchor_y = self._anchor(
             x, y, actual_height, before, flowable.getSpaceBefore(), halign, wscale
         )
         return Box(anchor_x, anchor_y, actual_width, actual_height)
+
+    @staticmethod
+    def _valign_offset(flowable: Flowable, height: float, valign: str) -> float:
+        """Height above the bottom of a wrapped flowable of the point ``valign`` names.
+
+        ``"cap"`` only means something for text: a table or an image has no
+        capitals, and falling back to ``"middle"`` would hide the mistake.
+        """
+        if valign == "bottom":
+            return 0.0
+        if valign == "middle":
+            return height / 2
+        if valign == "top":
+            return height
+        if valign == "cap":
+            if not isinstance(flowable, Paragraph):
+                raise ValueError(
+                    f"valign='cap' needs a Paragraph, and {type(flowable).__name__} is not one: use 'middle'"
+                )
+            return _cap_middle(flowable, height)
+        raise ValueError(f"valign must be 'bottom', 'middle', 'cap' or 'top', got {valign!r}")
 
     # ------------------------------------------------------------------
     # Drawing in flow
