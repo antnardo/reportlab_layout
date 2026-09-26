@@ -34,6 +34,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   protocol a file object has to meet: a `write` method that takes bytes.
 - A warning in the log when the header is taller than the top margin, or the
   footer taller than the bottom margin, since the edge of the page cuts it off.
+- The reference now documents two behaviours: `draw_table` never splits a table
+  across pages, and centring an image in the flow takes `wscale` as well as
+  `halign`.
 
 ## [1.2.0] — 2026-09-01
 

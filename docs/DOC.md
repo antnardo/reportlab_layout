@@ -188,7 +188,9 @@ box.right, box.top, box.center       # bottom-left corner plus conveniences
 ```
 
 `wscale` and `halign` go together: `wscale=0.5, halign="right"` lays a
-half-width block against the right margin.
+half-width block against the right margin. `halign` places a block `wscale`
+content widths wide and never looks at the element's own width, so on its own
+it does nothing. To centre an image, see [Images](#images).
 
 ### Factories
 
@@ -227,6 +229,22 @@ string:
 ```python
 cells = [[doc.make_paragraph(c, "Small") for c in row] for row in data]
 ```
+
+A table is laid down in one piece: `draw_table` never splits it across pages.
+With `auto_page_break`, a table that would overflow the bottom margin moves to a
+new page. If it is taller than the content area, it overflows there all the
+same: 80 rows of one line make 1440 points, nearly twice the height of an A4
+page. Split the rows yourself, one page each:
+
+```python
+for start in range(0, len(rows), 40):     # the heading and 40 rows of 18 pt fit on A4
+    if start:
+        doc.new_page()
+    doc.draw_table([heading, *rows[start:start + 40]])
+```
+
+Or hand the table to platypus: a `SimpleDocTemplate` splits it, and repeats the
+heading rows on every page with `repeatRows=1`.
 
 ## Drawing text
 
@@ -407,6 +425,17 @@ doc.draw_image(spec, scale=0.5)
 
 Giving `width` **and** `height` forces the ratio, which is sometimes what you
 want. Giving none of them raises `ValueError` rather than guessing.
+
+In the flow, an image lands against the left margin. `halign="center"` alone
+does not move it: it centres a block `wscale` content widths wide, and `wscale`
+defaults to the full width. Give the image's width as a fraction too:
+
+```python
+width = 60 * mm
+doc.draw_image(spec, width=width, wscale=width / doc.content_width, halign="center")
+```
+
+The same goes for a table narrower than the content width.
 
 ## Styles
 
