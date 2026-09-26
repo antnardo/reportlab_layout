@@ -9,6 +9,13 @@ amount is left empty at the bottom. The fix lowers the whole paragraph by that
 amount when it draws; an ordinary paragraph, whose first line is no taller than
 its type size, is drawn exactly as reportlab draws it.
 
+It also measures again the lines that start with an image. When a wrap puts an
+image at the head of a line, reportlab's ``breakLines`` (4.x as 5.0) stores the
+image's extent in two local variables instead of the line's: the line keeps the
+ascent and descent of its font, and a formula there overprints the line above or
+the block below. Each line's extent is recomputed from its words, as reportlab
+computes it for the others; a line without an image comes out unchanged.
+
 :class:`TaggedParagraph` sets a tag flush right on the last line, as LaTeX does
 with ``\\hfill`` at the end of a paragraph: the points of an exam question, a
 reference, a page number. When the last line has no room left for it, the tag
@@ -28,9 +35,12 @@ centred or right-aligned last line has no free end.
 from itertools import pairwise
 from typing import Any
 
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.pdfbase.pdfmetrics import getAscentDescent
 from reportlab.platypus import Paragraph
 from reportlab.platypus import paragraph as platypus_paragraph
+from reportlab.platypus.paragraph import imgNormV, imgVRange
 
 __all__ = ["InlineParagraph", "TaggedParagraph"]
 
@@ -73,13 +83,40 @@ def _line_extents(paragraph: Paragraph) -> list[tuple[float, float]]:
     return [(drop, leading - drop)] * len(blpara.lines)
 
 
+def _measure(line: Any) -> None:
+    """Set a wrapped line's ascent and descent from its words, images included."""
+    ascent = descent = None
+    for frag in line.words:
+        definition = getattr(frag, "cbDefn", None)
+        if definition is not None:
+            if getattr(definition, "kind", None) != "img":
+                continue  # an anchor or a callback takes no room
+            bottom, top = imgVRange(
+                imgNormV(definition.height, frag.fontSize), definition.valign, frag.fontSize
+            )
+        else:
+            top, bottom = getAscentDescent(frag.fontName, frag.fontSize)
+        ascent = top if ascent is None else max(ascent, top)
+        descent = bottom if descent is None else min(descent, bottom)
+    if ascent is not None and descent is not None:
+        line.ascent, line.descent = ascent, descent
+
+
 class InlineParagraph(Paragraph):
-    """A ``Paragraph`` whose first line leaves room for what stands above its text.
+    """A ``Paragraph`` whose lines leave room for the images they hold.
 
     Use it with ``autoLeading="max"`` whenever the text holds inline images
     (see :func:`~reportlab_layout.inline_image`) or changes size: a tall first
-    line then lowers the paragraph instead of overprinting the block above.
+    line then lowers the paragraph instead of overprinting the block above, and
+    a line that starts with an image is as tall as the image.
     """
+
+    def breakLines(self, width: Any) -> Any:  # noqa: N802 - reportlab's name
+        lines = super().breakLines(width)
+        if lines.kind and _auto_leading(self) in ("max", "min"):
+            for line in lines.lines:
+                _measure(line)
+        return lines
 
     def _first_line_shift(self) -> float:
         if not self.blPara.lines or not self.blPara.kind or _auto_leading(self) not in ("max", "min"):
@@ -137,7 +174,20 @@ class TaggedParagraph(InlineParagraph):
         **kwargs: Any,
     ) -> None:
         super().__init__(text, style, **kwargs)
-        self._tag = Paragraph(tag, tag_style or self.style) if tag else None
+        # The tag is one flush-right word: none of the paragraph's indents or spacing.
+        tag_base = tag_style or self.style
+        bare = ParagraphStyle(
+            f"{tag_base.name}-tag",
+            parent=tag_base,
+            leftIndent=0,
+            rightIndent=0,
+            firstLineIndent=0,
+            bulletIndent=0,
+            spaceBefore=0,
+            spaceAfter=0,
+            alignment=TA_LEFT,
+        )
+        self._tag = Paragraph(tag, bare) if tag else None
         self._gap = 0.5 * self.style.fontSize if gap is None else gap
         self._tag_width = 0.0
         self._tag_line = 0.0  # height of the line added for the tag, 0 on the last line

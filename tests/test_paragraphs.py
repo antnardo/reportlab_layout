@@ -102,6 +102,28 @@ class TestInlineParagraph:
         canvas.save()
         assert image_y + image_height > 500 + height + 5
 
+    def test_image_starting_a_line_makes_it_tall(self, tall, style, out):
+        # reportlab gives such a line the font's extent: the image overprinted the line below.
+        image = inline_image(tall, width=180, height=24, depth=8)  # too wide to follow "Energy"
+        paragraph = InlineParagraph(f"Energy {image} conserved", style)
+        paragraph.wrap(WIDTH, 1000)
+        image_line = paragraph.blPara.lines[1]
+        assert (image_line.ascent, image_line.descent) == (pytest.approx(16), pytest.approx(-8))
+        canvas = RecordingCanvas(str(out))
+        draw_at(paragraph, canvas)
+        [(_, image_y, _, _)] = canvas.images
+        canvas.save()
+        assert image_y >= 500 - 0.01
+
+    def test_line_without_image_measured_as_reportlab_does(self, style):
+        paragraph = InlineParagraph(f"<b>Bold</b> <font size=14>big</font> {TEXT}", style)
+        reference = Paragraph(f"<b>Bold</b> <font size=14>big</font> {TEXT}", style)
+        paragraph.wrap(WIDTH, 1000)
+        reference.wrap(WIDTH, 1000)
+        assert [(line.ascent, line.descent) for line in paragraph.blPara.lines] == [
+            (line.ascent, line.descent) for line in reference.blPara.lines
+        ]
+
     @pytest.mark.parametrize("markup", [TEXT, f"<b>Bold</b> {TEXT}"], ids=["plain", "markup"])
     def test_ordinary_paragraph_drawn_as_reportlab_draws_it(self, markup, style, tmp_path):
         paths = []
@@ -164,6 +186,12 @@ class TestTaggedParagraph:
         assert height == plain.wrap(WIDTH, 1000)[1] + style.leading
         drawn = baselines(out)
         assert drawn["[2 pts]"] == pytest.approx(drawn[full] - style.leading, abs=0.01)
+
+    def test_tag_ignores_the_indent_of_the_paragraph(self, out):
+        indented = ParagraphStyle("item", fontName="Helvetica", fontSize=10, leading=12, leftIndent=40)
+        tagged = TaggedParagraph("Short text", indented, tag="[2 pts]")
+        plain = Paragraph("Short text", indented)
+        assert tagged.wrap(WIDTH, 1000) == plain.wrap(WIDTH, 1000)
 
     def test_tag_markup_and_style(self, style, out):
         small = ParagraphStyle("tag", fontName="Courier", fontSize=6)
