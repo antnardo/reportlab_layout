@@ -45,6 +45,31 @@ jobs:
       - run: uv sync --group dev
       - run: uv run mypy
 
+  ink:
+    # The ink tests rasterise pages with pdftoppm, which the runners lack, so
+    # the test job skips them. Poppler substitutes a clone for each standard
+    # font: the URW ones match Adobe's cap heights, where a fallback sans would
+    # move the ink the tests measure.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - name: Install poppler and the URW fonts
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends poppler-utils fonts-urw-base35 fontconfig
+      - name: Fonts standing in for Helvetica and Times
+        run: |
+          fc-match Helvetica
+          fc-match Times-Roman
+      - run: uv sync --group dev
+      - name: Ink tests
+        run: uv run pytest -q -m ink -rs
+
   build:
     runs-on: ubuntu-latest
     steps:
