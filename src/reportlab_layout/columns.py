@@ -42,6 +42,8 @@ logger = logging.getLogger(__name__)
 _FUZZ = 1e-6
 #: How close to the lowest height the balancing gets, in points.
 _BALANCE_PRECISION = 0.5
+#: A column taller than any story, to measure one in a single column.
+_UNBOUNDED = 1e7
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,18 +176,12 @@ def balanced_height(
     """The lowest height, up to ``height``, at which ``story`` fits in the columns.
 
     ``story`` must fit at ``height``. The search starts from the height the
-    story would take in one column, divided among the columns: no packing can
-    do better.
+    story takes in a single column, divided among the columns: no packing can do
+    better. That height is measured by packing, not by adding up the flowables'
+    heights: a ``KeepTogether`` gives 16777215 on purpose, to be split.
     """
-    total = 0.0
-    for flowable in story:
-        if not isinstance(flowable, ActionFlowable):
-            total += (
-                flowable.getSpaceBefore()
-                + flowable.wrapOn(canvas, width, height)[1]
-                + flowable.getSpaceAfter()
-            )
-    fits, fails = height, min(height, total / columns) - _BALANCE_PRECISION
+    single = pack_columns(canvas, story, width, _UNBOUNDED, 1).height
+    fits, fails = height, min(height, single / columns) - _BALANCE_PRECISION
     while fits - fails > _BALANCE_PRECISION:
         trial = (fits + fails) / 2
         if pack_columns(canvas, story, width, trial, columns).rest:

@@ -129,6 +129,17 @@ class TestBalancedHeight:
         height = balanced_height(canvas, lines(10), 100, 500, 2)
         assert height == pytest.approx(60, abs=0.5)
 
+    def test_headings_kept_with_their_text_still_balance(self, canvas):
+        # KeepTogether reports a height of 16777215 to be split: the search must not add it up.
+        heading = ParagraphStyle("heading", parent=STYLE, keepWithNext=1)
+        story = []
+        for part in range(3):
+            story += [Paragraph(f"Part {part}", heading), *lines(5, f"part{part}")]
+        height = balanced_height(canvas, story, 100, 500, 2)
+        packing = pack_columns(canvas, story, 100, height, 2)
+        bottoms = [max(p.bottom for p in packing.placements if p.column == c) for c in (0, 1)]
+        assert height < 150 and abs(bottoms[0] - bottoms[1]) <= 2 * STYLE.leading
+
     def test_odd_count_leaves_the_longer_column_first(self, canvas):
         height = balanced_height(canvas, lines(9), 100, 500, 2)
         packing = pack_columns(canvas, lines(9), 100, height, 2)
