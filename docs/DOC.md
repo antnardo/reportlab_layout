@@ -212,6 +212,25 @@ half-width block against the right margin. There `halign` places a block
 its own it does nothing. To centre an image, see [Images](#images). In absolute
 mode, `halign` uses the element's width and `wscale` is ignored.
 
+### Several flowables as one block
+
+```python
+from reportlab.platypus import KeepTogether
+
+box = doc.draw(KeepTogether([heading, first_paragraph]))
+```
+
+`draw` lays a `KeepTogether` as one block: its flowables one under the other,
+spaced as in a frame, in a box as tall as they make together, which is the box
+returned. reportlab's own `KeepTogether` reports 16777215 pt, for a frame to
+split it, and has nothing to draw: `draw` measures and draws what it holds
+instead. With `auto_page_break`, the block moves to the next page whole when
+what is left of this one cannot hold it, and a group that no page can hold
+flows over the pages from the cursor, as a paragraph that long would. In
+absolute mode, `halign` and `valign` place the box; `"cap"` is refused, as for
+any flowable but a paragraph. A flowable narrower than the widest is placed by
+its own `hAlign`, as in [Columns](#columns).
+
 ### Factories
 
 To build a flowable without laying it down — useful for a header, a footer, or a
@@ -743,7 +762,9 @@ doc = PDFMaker("output.pdf", auto_page_break=True)
 
 It moves whole: a paragraph that a page can hold is never split, and the room
 it leaves at the foot of the page stays empty. To break a long text where the
-page ends, lay it with `draw_columns(story, columns=1)`, which splits it.
+page ends, lay it with `draw_columns(story, columns=1)`, which splits it. To
+move a heading to the next page with the paragraph under it, lay the two as
+[one block](#several-flowables-as-one-block).
 
 An element taller than the content area, which no page could hold, is split
 instead: from the cursor, over as many pages as it takes — a paragraph between
@@ -928,13 +949,16 @@ At `WARNING` it reports what a viewer would not show you:
 - an element laid by `draw` — in flow, relative or absolute — that runs past an
   edge of the page, with the page and the distance:
   `Table runs off page 1: 440.0 pt past its bottom edge`;
-- a block that cannot split and overflows the content area it is laid in;
 - a header taller than the top margin, or a footer taller than the bottom one,
   once per document rather than once per page.
 
 The shapes and strings drawn straight onto the canvas — `draw_string`,
 `draw_rect` and the like — are not watched: a background may bleed off the page
 on purpose. `reportlab_layout.frames` reports a frame's overflow at `WARNING`.
+`reportlab_layout.columns`, which splits the blocks `draw` spreads over pages as
+well as the columns, reports a flowable that cannot split and overflows the
+column it is laid in: `Image is 900.0 pt tall and cannot split: it overflows a
+756.9 pt column`.
 
 ## Migrating from `pdf_maker`
 

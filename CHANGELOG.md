@@ -71,15 +71,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   to — and an unknown value raises `ValueError` in every mode, as the 1.4.0
   entry said it already did. A call that passed `"center"` or `"right"` with
   `absolute=True` moves; one that passed `"left"`, or nothing, does not.
-- **A `KeepTogether` around a single flowable no longer fails.**
+- **A `KeepTogether` around a single flowable no longer fails in columns.**
   `draw_columns([KeepTogether([paragraph])])` raised `AttributeError:
-  'KeepTogether' object has no attribute 'draw'`, as did
-  `draw(KeepTogether([paragraph]))` with `auto_page_break`, which splits through
-  the same packing. `pack_columns` only took a split into two parts or more, a
-  `KeepTogether` hands its only flowable back alone, and the packing ended up
-  laying the `KeepTogether` itself, which has nothing to draw. A split is now
-  taken whatever its number of parts, provided the first one fits, and an empty
-  `KeepTogether` is dropped.
+  'KeepTogether' object has no attribute 'draw'`. `pack_columns` only took a
+  split into two parts or more, a `KeepTogether` hands its only flowable back
+  alone, and the packing ended up laying the `KeepTogether` itself, which has
+  nothing to draw. A split is now taken whatever its number of parts, provided
+  the first one fits, and an empty `KeepTogether` is dropped.
 - **A `KeepTogether` taller than the page flows over the columns.** At the top
   of a page, one whose first flowable no column could hold failed in the same
   way, or, with more flowables after it, had that one laid whole: 3,000 words
@@ -87,6 +85,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   gives way to its flowables there, which split over the columns and pages as
   if they were not grouped; a platypus frame does the same. Anywhere else, it
   still waits for a column that holds it whole.
+- **`draw` lays a `KeepTogether` as one block.** It raised the same
+  `AttributeError` in every mode, a `KeepTogether` reporting 16777215 pt, for a
+  frame to split it, with nothing to draw. `draw` now stacks its flowables one
+  under the other, spaced as in a frame, in a box as tall as they make
+  together, and returns that box. With `auto_page_break`, the group moves to
+  the next page whole when what is left of this one cannot hold it, and one
+  that no page can hold flows over the pages from the cursor, as a paragraph
+  that long would. In absolute mode, `halign` and `valign` place the box;
+  `valign="cap"` is refused, as for any flowable but a paragraph. A flowable
+  narrower than the widest is placed by its own `hAlign`, as in `draw_columns`.
 
 ## [1.5.0] — 2026-09-26
 

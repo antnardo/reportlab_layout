@@ -24,12 +24,13 @@ from typing import Any, Protocol, TypeAlias
 from reportlab.lib.styles import StyleSheet1
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as pdfcanvas
-from reportlab.platypus import Flowable, Frame, Image, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Frame, Image, KeepTogether, Paragraph, Spacer, Table, TableStyle
 from reportlab.platypus import paragraph as platypus_paragraph
+from reportlab.platypus.doctemplate import ActionFlowable
 
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
-from reportlab_layout.columns import Packing, balanced_height, pack_columns
+from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, pack_columns
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import PageGeometry
@@ -122,6 +123,60 @@ def _cap_middle(paragraph: Paragraph, height: float) -> float:
         return height / 2
     first, last = _baselines(paragraph, height)
     return (first + TextMetrics(paragraph.style).cap_height + last) / 2
+
+
+def _opened(canvas: pdfcanvas.Canvas, flowables: Iterable[Flowable], width: float) -> list[Flowable]:
+    """``flowables`` with every ``KeepTogether`` among them opened, at any depth.
+
+    Where this is called, nothing is left to keep together: a stack never
+    breaks, and a group that no page can hold breaks anyway. Opening them all
+    also gets round a ``KeepTogether`` inside another, which the outer one
+    counts at the 16777215 pt the inner one reports: it would never fit,
+    however tall the column. Split in a column with no bottom, a
+    ``KeepTogether`` hands back what it holds, after a break when such an inner
+    one swells it; the break goes, with any other action, which a column
+    ignores anyway.
+    """
+    opened: list[Flowable] = []
+    for flowable in flowables:
+        if isinstance(flowable, KeepTogether):
+            held = flowable.splitOn(canvas, width, _UNBOUNDED)
+            opened += _opened(canvas, [part for part in held if not isinstance(part, ActionFlowable)], width)
+        else:
+            opened.append(flowable)
+    return opened
+
+
+class _Stack(Flowable):
+    """The flowables of a ``KeepTogether``, one under the other: what :meth:`PDFMaker.draw` lays for it.
+
+    A ``KeepTogether`` only lives to be split: its ``wrap`` reports 16777215 pt
+    so that a frame always splits it, and it has no ``draw``. Packed in a single
+    column with no bottom to it, its flowables stack as a frame would stack
+    them, space between them included, and as :meth:`PDFMaker.draw_columns`
+    does: a flowable narrower than the widest is placed by its own ``hAlign``.
+    The stack is as tall as they make together, which tells ``draw`` whether
+    the group fits, and it draws that very packing.
+    """
+
+    def __init__(self, kept: KeepTogether) -> None:
+        super().__init__()
+        self.kept = kept
+        self.spaceBefore = kept.getSpaceBefore()
+        self.spaceAfter = kept.getSpaceAfter()
+        self.packing = Packing((), (), 0.0)
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        flowables = _opened(self.canv, [self.kept], available_width)
+        self.packing = pack_columns(self.canv, flowables, available_width, _UNBOUNDED, 1)
+        self.width = max((placement.width for placement in self.packing.placements), default=0.0)
+        self.height = self.packing.height
+        return self.width, self.height
+
+    def draw(self) -> None:
+        for placement in self.packing.placements:
+            bottom = self.height - placement.bottom
+            placement.flowable.drawOn(self.canv, 0, bottom, _sW=self.width - placement.width)
 
 
 class PDFMaker:
@@ -418,22 +473,29 @@ class PDFMaker:
         last part's. What cannot split is laid at the top of a page anyway,
         overflowing it, and logged.
 
+        A ``KeepTogether`` is laid as one block: its flowables one under the
+        other, spaced as in a frame, in a box as tall as they make together.
+        It moves to a new page whole, and only a group no page can hold is
+        split over the pages, as any block would be. ``halign`` and
+        ``valign`` place that box, and the box is what comes back.
+
         An element that runs off the page, in any mode, is logged as well:
         what lies past the edge is lost, and the PDF says nothing of it.
         """
         flow = y is None and not absolute
         allow_break = self.auto_page_break if page_break is None else page_break
         outline = self.show_boundaries if show_boundary is None else show_boundary
+        block = _Stack(flowable) if isinstance(flowable, KeepTogether) else flowable
 
-        box = self._place(flowable, x, y, width, height, before, absolute, halign, valign, wscale)
+        box = self._place(block, x, y, width, height, before, absolute, halign, valign, wscale)
         if flow and allow_break and box.y < self.bottom:
             # A new page sends the cursor back to the top: the box rises by as much.
             if box.y + self.cursor.depth - self.cursor.top < self.bottom:
                 return self._draw_over_pages(flowable, x, width, before, halign, wscale, outline)
             self.new_page()
-            box = self._place(flowable, x, y, width, height, before, absolute, halign, valign, wscale)
+            box = self._place(block, x, y, width, height, before, absolute, halign, valign, wscale)
 
-        self._lay(flowable, box, outline)
+        self._lay(block, box, outline)
         self._report_off_page(flowable, box)
         if flow:
             self.cursor.advance(
@@ -500,7 +562,13 @@ class PDFMaker:
         What cannot split -- an image, a single row taller than the page -- is
         laid at the top of a page all the same, overflowing it, and reported in
         the log: raising would stop the whole document for one block, and
-        leaving it out would lose it without a word.
+        leaving it out would lose it without a word. The packing does that,
+        told that the column at the top of a page is as tall as any will be,
+        as it does for :meth:`draw_columns`.
+
+        A ``KeepTogether`` that no page can hold has nothing left to keep: its
+        flowables go on as if they were not grouped, the first filling what is
+        left of this page like the first part of any other block.
 
         Every part sits at the ``x`` the whole flowable would have had, and
         ``before`` and the space before only push the first one down.
@@ -509,33 +577,18 @@ class PDFMaker:
         left, _ = self._anchor(x, None, 0, 0, 0, halign, wscale)
         at_top = self.cursor.depth <= self.cursor.top + _FUZZ
         self.cursor.advance(before * self.unit + flowable.getSpaceBefore())
-        queue = [flowable]
+        queue = _opened(self.canvas, [flowable], wrap_width)
         box = Box(left, self.cursor_y, 0, 0)
         while queue:
-            packing = pack_columns(self.canvas, queue, wrap_width, self.remaining_height, 1)
-            if packing.placements:
-                top = self.cursor_y
-                for placement in packing.placements:
-                    box = Box(left, top - placement.bottom, placement.width, placement.height)
-                    self._lay(placement.flowable, box, outline)
-                    self._report_off_page(placement.flowable, box)
-                self.cursor.advance(packing.height)
-                queue = list(packing.rest)
-            elif at_top:
-                head, *queue = packing.rest
-                # A failed split can leave the flowable unwrapped: a Paragraph drops its lines.
-                head_width, head_height = head.wrapOn(self.canvas, wrap_width, self.height)
-                box = Box(left, self.cursor_y - head_height, head_width, head_height)
-                self._lay(head, box, outline)
-                self.cursor.advance(head_height)
-                logger.warning(
-                    "%s is %.1f pt tall and cannot split: it overflows the %.1f pt content area of page %d",
-                    type(head).__name__,
-                    head_height,
-                    self.cursor.bottom_depth - self.cursor.top,
-                    self.page,
-                )
-                self._report_off_page(head, box)
+            # At the top of a page the column is as tall as any: overflow it rather than wait.
+            packing = pack_columns(self.canvas, queue, wrap_width, self.remaining_height, 1, overflow=at_top)
+            top = self.cursor_y
+            for placement in packing.placements:
+                box = Box(left, top - placement.bottom, placement.width, placement.height)
+                self._lay(placement.flowable, box, outline)
+                self._report_off_page(placement.flowable, box)
+            self.cursor.advance(packing.height)
+            queue = list(packing.rest)
             if queue:
                 self.new_page()
                 at_top = True
@@ -601,8 +654,9 @@ class PDFMaker:
             return height
         if valign == "cap":
             if not isinstance(flowable, Paragraph):
+                given = flowable.kept if isinstance(flowable, _Stack) else flowable
                 raise ValueError(
-                    f"valign='cap' needs a Paragraph, and {type(flowable).__name__} is not one: use 'middle'"
+                    f"valign='cap' needs a Paragraph, and {type(given).__name__} is not one: use 'middle'"
                 )
             return _cap_middle(flowable, height)
         raise ValueError(f"valign must be 'bottom', 'middle', 'cap' or 'top', got {valign!r}")

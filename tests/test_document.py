@@ -11,7 +11,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import KeepTogether
+from reportlab.platypus import Flowable, KeepTogether, Paragraph
 from reportlab.platypus import paragraph as platypus_paragraph
 
 from conftest import fill_rgb
@@ -444,11 +444,116 @@ class TestTooTallForAPage:
             box = doc.draw_table(marks(60), page_break=False)
         assert len(read(out).pages) == 1 and box.height == pytest.approx(60 * 18)
 
-    def test_keep_together_around_one_paragraph_is_drawn(self, out, stylesheet):
-        # A KeepTogether reports 16777215 pt on purpose, to be split: it comes this way.
-        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
-            doc.draw(KeepTogether([doc.make_paragraph("ALONE")]))
+
+BODY = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=12)
+
+
+def group(*texts):
+    return KeepTogether([Paragraph(text, BODY) for text in texts])
+
+
+class Marker(Flowable):
+    """A flowable of a fixed size that records where on the page it was drawn."""
+
+    def __init__(self, width, height, align="LEFT"):
+        super().__init__()
+        self.width, self.height, self.hAlign = width, height, align
+        self.drawn_at = None
+
+    def wrap(self, available_width, available_height):
+        return self.width, self.height
+
+    def draw(self):
+        self.drawn_at = self.canv.absolutePosition(0, 0)
+
+
+class TestKeepTogether:
+    """draw() lays a KeepTogether as the block its flowables make.
+
+    reportlab's own reports 16777215 pt, for a frame to split it, and has
+    nothing to draw: 1.5.0 raised AttributeError on it, whatever the mode.
+    """
+
+    def test_flowables_are_stacked_in_one_box(self, doc, out):
+        start = doc.cursor.depth
+        box = doc.draw(group("ALPHA", "BRAVO"))
+        doc.save()
+        found = baselines(out)
+        assert box.height == pytest.approx(24) and doc.cursor.depth == pytest.approx(start + 24)
+        assert (found["ALPHA"], found["BRAVO"]) == pytest.approx((box.top - 10, box.top - 22))
+
+    @pytest.mark.parametrize("page_break", [False, True])
+    def test_group_of_one_paragraph_is_drawn(self, out, stylesheet, page_break):
+        with PDFMaker(out, auto_page_break=page_break, stylesheet=stylesheet) as doc:
+            doc.draw(group("ALONE"))
         assert len(read(out).pages) == 1 and page_text(out).split() == ["ALONE"]
+
+    def test_group_a_page_can_hold_moves_to_the_next_one_whole(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.advance(doc.remaining_height - 15)  # room for one line, not two
+            doc.draw(group("ALPHA", "BRAVO"))
+        assert page_text(out, 0).split() == [] and page_text(out, 1).split() == ["ALPHA", "BRAVO"]
+
+    @pytest.mark.parametrize("after", [[], ["AFTER"]])
+    def test_group_no_page_can_hold_flows_over_the_pages(self, out, stylesheet, after):
+        # Its first flowable is taller than a page: it starts under INTRODUCTION, as it would alone.
+        words = [f"word{n}" for n in range(1500)]
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("INTRODUCTION")
+            doc.draw(group(" ".join(words), *after))
+        pages = [text_baselines(out, index) for index in range(len(read(out).pages))]
+        found = [word for page in pages for text, _ in page for word in text.split()]
+        assert found == ["INTRODUCTION", *words, *after] and "word0" in page_text(out, 0)
+        assert all(y > doc.y_bottom for page in pages for _, y in page)
+
+    def test_absolute_group_is_placed_by_its_box(self, doc, out):
+        box = doc.draw(
+            group("ALPHA", "BRAVO"), x=300, y=500, width=200, absolute=True, halign="center", valign="top"
+        )
+        doc.save()
+        assert (box.x + box.width / 2, box.top) == pytest.approx((300, 500))
+        assert baselines(out)["ALPHA"] == pytest.approx(490)
+
+    def test_cap_is_refused_in_the_name_of_the_group(self, doc):
+        with pytest.raises(ValueError, match="needs a Paragraph, and KeepTogether is not one"):
+            doc.draw(group("ALPHA"), x=100, y=100, absolute=True, valign="cap")
+
+    def test_narrower_flowable_is_placed_by_its_own_halign(self, doc):
+        wide, narrow = Marker(400, 20), Marker(100, 20, align="CENTER")
+        box = doc.draw(KeepTogether([wide, narrow]))
+        assert (box.width, box.height) == (400, 40)
+        assert wide.drawn_at == pytest.approx((box.x, box.y + 20))
+        assert narrow.drawn_at == pytest.approx((box.x + 150, box.y))
+
+    def test_groups_nested_in_it_are_opened(self, doc, out):
+        # The outer group counts the inner one at 16777215 pt: packed as they come, it lost them.
+        box = doc.draw(KeepTogether([Paragraph("ALPHA", BODY), KeepTogether([group("BRAVO", "CHARLIE")])]))
+        doc.save()
+        assert box.height == pytest.approx(36) and page_text(out).split() == ["ALPHA", "BRAVO", "CHARLIE"]
+
+    def test_empty_group_draws_nothing(self, doc):
+        start = doc.cursor.depth
+        box = doc.draw(KeepTogether([]))
+        assert box.height == 0 and doc.cursor.depth == start
+
+    def test_space_around_it_is_that_of_its_first_and_last_flowables(self, doc):
+        spaced = ParagraphStyle("spaced", parent=BODY, spaceBefore=6, spaceAfter=8)
+        top, start = doc.cursor_y, doc.cursor.depth
+        box = doc.draw(KeepTogether([Paragraph("ALPHA", spaced), Paragraph("BRAVO", spaced)]))
+        assert (box.top, box.height) == pytest.approx((top - 6, 12 + 8 + 6 + 12))
+        assert doc.cursor.depth == pytest.approx(start + 6 + box.height + 8)
+
+    def test_flowable_taller_than_a_page_kept_with_the_next_overflows_alone(self, out, stylesheet, caplog):
+        # keepWithNext binds the two again when the group is split over the pages.
+        tall = Marker(100, 900)
+        tall.keepWithNext = 1
+        with (
+            caplog.at_level(logging.WARNING),
+            PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc,
+        ):
+            doc.draw(KeepTogether([tall, Paragraph("CAPTION", BODY)]))
+        assert "Marker is 900.0 pt tall and cannot split" in caplog.text
+        assert page_text(out, 1).split() == ["CAPTION"]
 
 
 class TestHeaderFooter:

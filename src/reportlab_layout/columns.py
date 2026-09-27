@@ -50,7 +50,8 @@ logger = logging.getLogger(__name__)
 _FUZZ = 1e-6
 #: How close to the lowest height the balancing gets, in points.
 _BALANCE_PRECISION = 0.5
-#: A column taller than any story, to measure one in a single column.
+#: A column taller than any story, to measure one in a single column. It stays
+#: below the 16777215 pt a KeepTogether reports, so that one still splits.
 _UNBOUNDED = 1e7
 
 
