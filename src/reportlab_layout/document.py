@@ -43,6 +43,10 @@ __all__ = ["OutputLike", "PDFMaker", "Writable"]
 
 logger = logging.getLogger(__name__)
 
+#: How close to the top of the content area the cursor counts as standing on
+#: it, in points: rounding, not space.
+_FUZZ = 1e-6
+
 TableCommand: TypeAlias = tuple[Any, ...]
 
 
@@ -285,11 +289,13 @@ class PDFMaker:
         data: list[list[object]],
         col_widths: float | list[float] | None = None,
         row_heights: float | list[float] | None = None,
+        repeat_rows: int = 0,
     ) -> Table:
         """Build a ``Table``.
 
         Without ``col_widths`` the content width is split evenly. A scalar
-        applies to every column.
+        applies to every column. The first ``repeat_rows`` rows are repeated
+        at the top of every part when the table is split across pages.
         """
         if not data or not data[0]:
             raise ValueError("A table needs at least one non-empty row")
@@ -298,7 +304,7 @@ class PDFMaker:
             col_widths = [self.content_width / columns] * columns
         elif not isinstance(col_widths, list | tuple):
             col_widths = [col_widths] * columns
-        return Table(data, colWidths=list(col_widths), rowHeights=row_heights)
+        return Table(data, colWidths=list(col_widths), rowHeights=row_heights, repeatRows=repeat_rows)
 
     def make_image(
         self,
@@ -376,24 +382,100 @@ class PDFMaker:
         centred. Any other flowable refuses it.
 
         ``page_break`` at ``None`` follows the document's ``auto_page_break``
-        setting; ``True`` or ``False`` force it for this call.
+        setting; ``True`` or ``False`` force it for this call. With page breaks
+        on, a flowable laid in flow that would cross the bottom margin starts a
+        new page, whole. One that no page could hold is split instead, from the
+        cursor, over as many pages as it takes, and the box returned is its
+        last part's. What cannot split is laid at the top of a page anyway,
+        overflowing it, and logged.
         """
         flow = y is None and not absolute
         allow_break = self.auto_page_break if page_break is None else page_break
+        outline = self.show_boundaries if show_boundary is None else show_boundary
 
         box = self._place(flowable, x, y, width, height, before, absolute, halign, valign, wscale)
         if flow and allow_break and box.y < self.bottom:
+            # A new page sends the cursor back to the top: the box rises by as much.
+            if box.y + self.cursor.depth - self.cursor.top < self.bottom:
+                return self._draw_over_pages(flowable, x, width, before, halign, wscale, outline)
             self.new_page()
             box = self._place(flowable, x, y, width, height, before, absolute, halign, valign, wscale)
 
-        flowable.drawOn(self.canvas, box.x, box.y)
-        outline = self.show_boundaries if show_boundary is None else show_boundary
-        if outline:
-            self.shapes.rect(*box)
+        self._lay(flowable, box, outline)
         if flow:
             self.cursor.advance(
                 box.height + before * self.unit + flowable.getSpaceBefore() + flowable.getSpaceAfter()
             )
+        return box
+
+    def _lay(self, flowable: Flowable, box: Box, outline: bool) -> None:
+        """Draw a flowable already wrapped into ``box``, and outline the box if asked."""
+        flowable.drawOn(self.canvas, box.x, box.y)
+        if outline:
+            self.shapes.rect(*box)
+
+    def _draw_over_pages(
+        self,
+        flowable: Flowable,
+        x: float | None,
+        width: float | None,
+        before: float,
+        halign: str,
+        wscale: float,
+        outline: bool,
+    ) -> Box:
+        """Lay down in flow a flowable taller than the content area, split over the pages.
+
+        Breaking the page first, as for a block that only needs a fresh page,
+        would leave the page empty and the block no shorter: 1.5.0 did that,
+        then let the block run off the bottom of the next page. The splitting
+        is :func:`pack_columns`'s, in a single column as tall as what is left
+        of the page, the one :meth:`draw_columns` relies on: a paragraph splits
+        between two lines, a table between two rows and repeats its heading
+        rows. The first part fills what is left of this page, if a line or a
+        row fits there; the rest go on the pages after, from the top.
+
+        What cannot split -- an image, a single row taller than the page -- is
+        laid at the top of a page all the same, overflowing it, and reported in
+        the log: raising would stop the whole document for one block, and
+        leaving it out would lose it without a word.
+
+        Every part sits at the ``x`` the whole flowable would have had, and
+        ``before`` and the space before only push the first one down.
+        """
+        wrap_width = self.content_width if width is None else width
+        left, _ = self._anchor(x, None, 0, 0, 0, halign, wscale)
+        at_top = self.cursor.depth <= self.cursor.top + _FUZZ
+        self.cursor.advance(before * self.unit + flowable.getSpaceBefore())
+        queue = [flowable]
+        box = Box(left, self.cursor_y, 0, 0)
+        while queue:
+            packing = pack_columns(self.canvas, queue, wrap_width, self.remaining_height, 1)
+            if packing.placements:
+                top = self.cursor_y
+                for placement in packing.placements:
+                    box = Box(left, top - placement.bottom, placement.width, placement.height)
+                    self._lay(placement.flowable, box, outline)
+                self.cursor.advance(packing.height)
+                queue = list(packing.rest)
+            elif at_top:
+                head, *queue = packing.rest
+                # A failed split can leave the flowable unwrapped: a Paragraph drops its lines.
+                head_width, head_height = head.wrapOn(self.canvas, wrap_width, self.height)
+                box = Box(left, self.cursor_y - head_height, head_width, head_height)
+                self._lay(head, box, outline)
+                self.cursor.advance(head_height)
+                logger.warning(
+                    "%s is %.1f pt tall and cannot split: it overflows the %.1f pt content area of page %d",
+                    type(head).__name__,
+                    head_height,
+                    self.cursor.bottom_depth - self.cursor.top,
+                    self.page,
+                )
+            if queue:
+                self.new_page()
+                at_top = True
+        self.cursor.advance(flowable.getSpaceAfter())
         return box
 
     def _place(
@@ -474,15 +556,18 @@ class PDFMaker:
         col_widths: float | list[float] | None = None,
         row_heights: float | list[float] | None = None,
         style: Iterable[TableCommand] | TableStyle | None = None,
+        repeat_rows: int = 0,
         **kwargs: Any,
     ) -> Box:
         """Lay down a table.
 
         ``style`` is a sequence of reportlab commands
         (``("GRID", (0, 0), (-1, -1), 0.5, colors.black)``) or a ``TableStyle``
-        already built. Cells are middle-aligned vertically by default.
+        already built. Cells are middle-aligned vertically by default. A table
+        taller than the page is split across pages when page breaks are on,
+        its first ``repeat_rows`` rows at the top of every part.
         """
-        table = self.make_table(data, col_widths=col_widths, row_heights=row_heights)
+        table = self.make_table(data, col_widths=col_widths, row_heights=row_heights, repeat_rows=repeat_rows)
         if style is None:
             style = [("VALIGN", (0, 0), (-1, -1), "MIDDLE")]
         table.setStyle(style if isinstance(style, TableStyle) else TableStyle(list(style)))
@@ -548,7 +633,7 @@ class PDFMaker:
         queue = list(story)
         while True:
             room = self.remaining_height
-            at_top = self.cursor.depth <= self.cursor.top + 1e-6
+            at_top = self.cursor.depth <= self.cursor.top + _FUZZ
             packing = pack_columns(self.canvas, queue, width, room, columns, overflow=at_top)
             if packing.rest and not packing.placements and not at_top:
                 self.new_page()

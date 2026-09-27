@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -296,6 +297,116 @@ class TestPagination:
             doc.draw_paragraph("Une ligne parmi beaucoup d'autres.", page_break=False)
         doc.save()
         assert len(read(out).pages) == 1
+
+
+def marks(count):
+    """A heading row, then count - 1 rows of one line each: 18 pt a row."""
+    return [["Name", "Mark"]] + [[f"Student {n}", str(n % 20)] for n in range(1, count)]
+
+
+def students(path):
+    """The numbers of the students on each page, in the order drawn."""
+    return [[int(n) for n in re.findall(r"Student (\d+)", page.extract_text())] for page in read(path).pages]
+
+
+def text_baselines(path, index=0):
+    """Every line of text on a page and its baseline, repeated lines included."""
+    found = []
+
+    def record(text, cm, tm, font_dict, font_size):
+        if text.strip():
+            found.append((text.strip(), tm[4] * cm[1] + tm[5] * cm[3] + cm[5]))
+
+    read(path).pages[index].extract_text(visitor_text=record)
+    return found
+
+
+#: How far past the content area the ink of a table split over pages may reach,
+#: in points: half its 0.5 pt rules, and a pixel at 300 dpi.
+SPLIT_INK_TOLERANCE = 0.25 + 72 / 300
+
+
+class TestTooTallForAPage:
+    """In flow, with page breaks on, a block no page can hold is split rather than moved.
+
+    Up to 1.5.0 it went to a new page even from the top of an empty one, which
+    left that page blank, then ran off the bottom of the next without a word.
+    """
+
+    def test_table_starts_on_the_first_page_and_loses_no_row(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw_table(marks(60))  # 1080 pt, for 757 pt of content on A4
+        found = students(out)
+        assert len(found) == 2 and found[0][0] == 1
+        assert [n for page in found for n in page] == list(range(1, 60))
+
+    @pytest.mark.ink
+    def test_ink_of_every_part_stays_in_the_content_area(self, out, stylesheet, ink):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw_table(marks(60), style=[("GRID", (0, 0), (-1, -1), 0.5, "black")])
+        for page in (1, 2):
+            measured = ink(out, page=page, dpi=300)
+            assert measured.bottom >= doc.y_bottom - SPLIT_INK_TOLERANCE
+            assert measured.top <= doc.y_top + SPLIT_INK_TOLERANCE
+
+    def test_heading_rows_open_every_part(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw_table(marks(60), repeat_rows=1)
+        assert [page.extract_text().split()[:2] for page in read(out).pages] == [["Name", "Mark"]] * 2
+
+    def test_first_part_fills_what_is_left_of_the_page(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw_paragraph("INTRODUCTION")
+            doc.draw_table(marks(60))
+        found = students(out)
+        assert found[0][0] == 1 and "INTRODUCTION" in page_text(out, 0)
+
+    def test_block_that_fits_a_page_still_moves_whole(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.advance(doc.remaining_height / 2)
+            doc.draw_table(marks(30))  # 540 pt: a page holds it, what is left of this one does not
+        assert students(out) == [[], list(range(1, 30))]
+
+    def test_paragraph_loses_no_word_and_keeps_off_the_footer(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.set_footer(doc.make_paragraph("FOOTER"))
+            doc.draw_paragraph("word " * 1500)
+        pages = [page.extract_text().split() for page in read(out).pages]
+        assert sum(page.count("word") for page in pages) == 1500
+        assert all(page.count("FOOTER") == 1 for page in pages)
+        for index in range(len(pages)):
+            lowest = min(y for text, y in text_baselines(out, index) if text.startswith("word"))
+            assert lowest > doc.y_bottom
+
+    def test_cursor_carries_on_under_the_last_part(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            last = doc.draw_table(marks(60))
+            after = doc.draw_paragraph("AFTER THE TABLE")
+        assert doc.page == 2 and last.top == pytest.approx(doc.y_top)
+        assert after.top == pytest.approx(last.y)
+        assert "AFTER THE TABLE" in page_text(out, 1)
+
+    def test_what_cannot_split_goes_at_the_top_and_is_logged(self, out, stylesheet, picture, caplog):
+        doc = PDFMaker(out, auto_page_break=True, stylesheet=stylesheet)
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            box = doc.draw_image(picture, width=100, height=900)
+        doc.save()
+        assert len(read(out).pages) == 1 and box.top == pytest.approx(doc.y_top)
+        assert "Image is 900.0 pt tall and cannot split" in caplog.text
+
+    def test_what_cannot_split_leaves_a_started_page(self, out, stylesheet, picture, caplog):
+        doc = PDFMaker(out, auto_page_break=True, stylesheet=stylesheet)
+        doc.draw_paragraph("INTRODUCTION")
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            box = doc.draw_image(picture, width=100, height=900)
+        doc.save()
+        assert doc.page == 2 and box.top == pytest.approx(doc.y_top)
+        assert "INTRODUCTION" in page_text(out, 0) and "cannot split" in caplog.text
+
+    def test_without_page_breaks_the_block_stays_whole(self, out, stylesheet):
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            box = doc.draw_table(marks(60), page_break=False)
+        assert len(read(out).pages) == 1 and box.height == pytest.approx(60 * 18)
 
 
 class TestHeaderFooter:

@@ -178,7 +178,7 @@ doc.draw_image(logo, width=40 * mm, x=doc.x_right, y=doc.y_top, absolute=True, h
 ```python
 doc.draw(flowable, **kwargs)                      # any reportlab flowable
 doc.draw_paragraph(text, style=None, **kwargs)
-doc.draw_table(data, col_widths=None, row_heights=None, style=None, **kwargs)
+doc.draw_table(data, col_widths=None, row_heights=None, style=None, repeat_rows=0, **kwargs)
 doc.draw_image(spec, width=None, height=None, scale=None, **kwargs)
 doc.draw_centered_line(y=None, wscale=1.0, stroke=None, line_width=0.5)
 ```
@@ -219,7 +219,7 @@ table cell:
 ```python
 doc.make_paragraph(text, style=None)
 doc.make_spacer(space=1)                 # in reference type sizes
-doc.make_table(data, col_widths=None, row_heights=None)
+doc.make_table(data, col_widths=None, row_heights=None, repeat_rows=0)
 doc.make_image(spec, width=None, height=None, scale=None)
 ```
 
@@ -249,21 +249,33 @@ string:
 cells = [[doc.make_paragraph(c, "Small") for c in row] for row in data]
 ```
 
-A table is laid down in one piece: `draw_table` never splits it across pages.
 With `auto_page_break`, a table that would overflow the bottom margin moves to a
-new page. If it is taller than the content area, it overflows there all the
-same: 80 rows of one line make 1440 points, nearly twice the height of an A4
-page. Split the rows yourself, one page each:
+new page, in one piece, when a page can hold it. One taller than the content
+area is split between two rows instead: its first part fills what is left of the
+page, the rest carries on over as many pages as it takes — 80 rows of one line
+make 1440 points, nearly twice the height of an A4 page. `repeat_rows` repeats
+the heading rows at the top of every part:
 
 ```python
-for start in range(0, len(rows), 40):     # the heading and 40 rows of 18 pt fit on A4
-    if start:
-        doc.new_page()
-    doc.draw_table([heading, *rows[start:start + 40]])
+doc.draw_table([heading, *rows], repeat_rows=1)
 ```
 
-Or hand the table to platypus: a `SimpleDocTemplate` splits it, and repeats the
-heading rows on every page with `repeatRows=1`.
+The box returned is then the last part's, on the last page, and the cursor
+carries on under it. See [Pagination](#pagination).
+
+To split a table that a page could hold, rather than move it whole, hand it to
+[`draw_columns`](#columns) with a single column, which fills what is left of the
+page first:
+
+```python
+table = doc.make_table([heading, *rows], col_widths=[120, 60], repeat_rows=1)
+doc.draw_columns([table], columns=1)
+```
+
+`draw_columns` lays a flowable as a platypus frame does, by the flowable's own
+`hAlign`: reportlab centres a table or an image by default, so a table narrower
+than the content area comes out centred there, where `draw_table` sets it
+against the left margin.
 
 ## Drawing text
 
@@ -711,6 +723,17 @@ starts a new page before it is laid down.
 doc = PDFMaker("output.pdf", auto_page_break=True)
 ```
 
+It moves whole: a paragraph that a page can hold is never split, and the room
+it leaves at the foot of the page stays empty. To break a long text where the
+page ends, lay it with `draw_columns(story, columns=1)`, which splits it.
+
+An element taller than the content area, which no page could hold, is split
+instead: from the cursor, over as many pages as it takes — a paragraph between
+two lines, a table between two rows, repeating its `repeat_rows`. `draw` returns
+the box of the last part, and the cursor carries on under it. A block that
+cannot split, such as an image or a table row taller than the page, is laid at
+the top of a page anyway, overflowing it, and a warning goes to the log.
+
 `page_break=False` on one call disables the break for that element;
 `page_break=True` enables it even if the document did not ask for it.
 
@@ -766,6 +789,13 @@ then moves under them, and the box they cover on that page is returned.
 - A flowable that cannot split and is taller than a whole column is laid down
   anyway, overflowing it, and reported in the log: neither lost, nor an endless
   loop.
+- A flowable narrower than its column is placed by its own `hAlign`, as in a
+  platypus frame. reportlab gives a table and an image `"CENTER"`, so they come
+  out centred in the column, where `draw` sets them against the left margin;
+  set `table.hAlign = "LEFT"` to keep them there.
+- With a single column, `draw_columns` splits a paragraph or a table where the
+  page ends, heading rows repeated, rather than moving it whole to the next
+  page as `draw` does.
 
 The balanced height is found by trying heights, a dozen times or so. The trials
 only wrap and split the flowables: nothing is drawn until the last, and an image
@@ -846,7 +876,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
-`reportlab_layout.document` emits page changes and frame creations at `DEBUG`;
+`reportlab_layout.document` emits page changes and frame creations at `DEBUG`,
+and at `WARNING` a block that cannot split and overflows the page it is laid on;
 `reportlab_layout.frames` reports overflow at `WARNING`.
 
 ## Migrating from `pdf_maker`

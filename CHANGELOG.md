@@ -5,8 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Added
+
+- `repeat_rows` on `make_table` and `draw_table`: the heading rows, repeated at
+  the top of every part of a table split across pages.
+
 ### Fixed
 
+- **A block taller than the page is split, no longer lost.** With
+  `auto_page_break`, `draw` sent a block that would cross the bottom margin to a
+  new page even from the top of an empty one, where a new page could not help.
+  That page stayed blank, and the block ran off the bottom of the next one
+  without a word: 9 rows of a 50-row table, 197 of the 1,500 words of a long
+  paragraph, which covered the footer on its way. A block that no page can hold
+  is now split, from the cursor, over as many pages as it takes: a paragraph
+  between two lines, a table between two rows. What cannot split, such as an
+  image, is laid at the top of a page and logged. A block that a page can hold
+  still moves to the next one whole, as before.
 - **`halign` in absolute mode.** `draw_table(..., x=306, absolute=True,
   halign="center")` left the table's left edge on 306 whatever `halign` said,
   and `halign="sideways"` went through without a word: `halign` was only read
