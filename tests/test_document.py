@@ -170,6 +170,11 @@ class TestAbsolutePlacement:
         )
         assert box.x + share * box.width == pytest.approx(306)
 
+    def test_left_keeps_x_as_it_was_given(self, doc):
+        """The Box a reader prints shows x=10, as it did before halign counted here."""
+        box = doc.draw_table([["a"]], col_widths=[30], x=10, y=100, absolute=True, valign="top")
+        assert repr(box).startswith("Box(x=10, ")
+
     def test_halign_centres_a_paragraph_block_on_x(self, doc):
         box = doc.draw_paragraph("Hello", x=300, y=200, width=200, absolute=True, halign="center")
         assert box.x == pytest.approx(200)

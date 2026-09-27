@@ -579,7 +579,7 @@ class PDFMaker:
         content area's.
         """
         if halign == "left":
-            return 0.0
+            return 0  # not 0.0, which would turn an x given as 10 into 10.0 in the Box
         if halign == "center":
             return width / 2
         if halign == "right":
