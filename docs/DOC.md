@@ -60,6 +60,7 @@ doc = PDFMaker(
     stylesheet=None,        # None -> the shared STYLES sheet
     auto_page_break=False,
     show_boundaries=False,
+    canvasmaker=Canvas,     # what builds the canvas: NumberedCanvas numbers the pages
 )
 ```
 
@@ -857,11 +858,18 @@ does for columns as tall as the page.
 ## Page "x of y" numbering
 
 Since the page count is only known at the end, you need a canvas that records
-the pages and replays them.
+the pages and replays them. `NumberedCanvas` does, and a `PDFMaker` takes it as
+its `canvasmaker`, as a platypus template does:
+
+```python
+from reportlab_layout import NumberedCanvas, PDFMaker
+
+with PDFMaker("output.pdf", auto_page_break=True, canvasmaker=NumberedCanvas) as doc:
+    doc.draw_paragraph(text)
+```
 
 ```python
 from reportlab.platypus import SimpleDocTemplate
-from reportlab_layout import NumberedCanvas
 
 SimpleDocTemplate("output.pdf").build(story, canvasmaker=NumberedCanvas)
 ```
@@ -870,16 +878,34 @@ It also works as a standalone canvas, with no `DocTemplate` — that is the
 difference from the recipe that circulates, which silently loses the last page
 in that case.
 
-To change how it looks:
+The folio is set flush right, its end 15 mm from the right edge of the page and
+its baseline 10 mm above the bottom, whatever the page size. To change how it
+looks:
 
 ```python
 class Folio(NumberedCanvas):
-    folio_position = (200 * mm, 8 * mm)
+    folio_inset = (20 * mm, 8 * mm)      # from the bottom-right corner of any page
     folio_font = ("Helvetica-Oblique", 8)
     folio_label = staticmethod(lambda page, total: f"— {page} / {total} —")
 ```
 
-Or override `draw_folio(page, total)` for full control.
+`folio_position = (x, y)` pins the end of the folio to one point instead, on
+every page. Or override `draw_folio(page, total)` for full control.
+
+The canvas draws the folio outside the document's layout, and knows nothing of
+its footer: leave it room in the bottom margin. "Page x" alone needs no special
+canvas. `draw_header_footer` runs as each page closes, `doc.page` still that
+page's number, so a subclass can rebuild its footer there:
+
+```python
+class Report(PDFMaker):
+    def draw_header_footer(self):
+        self.set_footer(self.make_paragraph(f"Page {self.page}", "Right"))
+        super().draw_header_footer()
+```
+
+`doc.canvas` may also be replaced after construction, before anything is drawn:
+`draw_string`, `draw_rect` and the other painters follow it onto the new canvas.
 
 ## Debugging a layout
 

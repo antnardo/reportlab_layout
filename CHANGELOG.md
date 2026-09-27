@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ### Added
 
+- **`canvasmaker` for `PDFMaker`**, as `SimpleDocTemplate.build` takes one:
+  `PDFMaker(path, canvasmaker=NumberedCanvas)` numbers the pages "x of y". The
+  document used to build its own canvas, so that `NumberedCanvas` only served
+  platypus templates.
+- `NumberedCanvas.folio_inset`, the distance of the folio from the bottom-right
+  corner of the page, whatever its size.
 - `repeat_rows` on `make_table` and `draw_table`: the heading rows, repeated at
   the top of every part of a table split across pages.
 - **A warning for an element laid off the page.** reportlab draws past the edge
@@ -21,9 +27,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 - A header or footer taller than its margin is reported once per document, no
   longer once per page with the same figures.
+- **`NumberedCanvas` sets its folio from the page's size**: its end 15 mm from
+  the right edge, its baseline 10 mm above the bottom. It used to end at 195 mm
+  whatever the page, which only suited A4 portrait, where it does not move: on
+  letter it now ends at 569.5 pt instead of 552.8, on A4 landscape at 799.4.
+  `folio_position` still pins it to a point, and is `None` unless set.
 
 ### Fixed
 
+- **Replacing `doc.canvas` no longer loses drawings.** `draw_string`,
+  `draw_rect` and the other canvas-level calls went on drawing on the canvas the
+  document was built with, which was never saved: their output vanished without
+  an error, while the flowables reached the new canvas. They now follow it.
 - **A block taller than the page is split, no longer lost.** With
   `auto_page_break`, `draw` sent a block that would cross the bottom margin to a
   new page even from the top of an empty one, where a new page could not help.

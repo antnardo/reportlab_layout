@@ -23,16 +23,25 @@ def _default_label(page: int, total: int) -> str:
 class NumberedCanvas(canvas.Canvas):
     """A canvas that stamps a "page x of y" folio on every page.
 
-    Pass it as ``canvasmaker`` to ``SimpleDocTemplate.build``, or use it
-    directly in place of ``canvas.Canvas``::
+    Pass it as ``canvasmaker`` to ``SimpleDocTemplate.build`` or to
+    :class:`~reportlab_layout.PDFMaker`, or use it directly in place of
+    ``canvas.Canvas``::
 
         doc.build(story, canvasmaker=NumberedCanvas)
 
     Position, font and label are set through class attributes or by subclassing.
     """
 
-    #: Folio position, in points from the bottom-left corner.
-    folio_position: tuple[float, float] = (195 * mm, 10 * mm)
+    #: Where the folio ends -- it is set flush right against that point --, in
+    #: points from the bottom-left corner. ``None`` follows the page: see
+    #: ``folio_inset``.
+    folio_position: tuple[float, float] | None = None
+    #: Without ``folio_position``, how far the folio ends from the right edge of
+    #: the page, and its baseline from the bottom, in points. A fixed point only
+    #: suits one page size: 195 mm, the default until 1.5.0, ends the folio 15 mm
+    #: from the right edge of A4 portrait, but 21 mm from it on letter and
+    #: 102 mm on A4 landscape.
+    folio_inset: tuple[float, float] = (15 * mm, 10 * mm)
     folio_font: tuple[str, float] = ("Helvetica", 9)
     #: A ``(page, total) -> str`` function producing the label.
     folio_label: Callable[[int, int], str] = staticmethod(_default_label)
@@ -64,4 +73,15 @@ class NumberedCanvas(canvas.Canvas):
     def draw_folio(self, page: int, total: int) -> None:
         """Stamp the folio. Override to change how it looks."""
         self.setFont(*self.folio_font)
-        self.drawRightString(*self.folio_position, type(self).folio_label(page, total))
+        self.drawRightString(*self._folio_point(), type(self).folio_label(page, total))
+
+    def _folio_point(self) -> tuple[float, float]:
+        """Where the folio of the page being stamped ends, in points from the bottom-left corner.
+
+        Read from the page's own size, which a canvas may change from one page
+        to the next.
+        """
+        if self.folio_position is not None:
+            return self.folio_position
+        right, bottom = self.folio_inset
+        return self._pagesize[0] - right, bottom

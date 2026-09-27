@@ -2,7 +2,9 @@
 
 import pytest
 from pypdf import PdfReader
-from reportlab.lib.units import mm
+from reportlab.lib.pagesizes import A4, landscape, letter
+from reportlab.lib.units import inch, mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate
 
 from reportlab_layout import NumberedCanvas, make_stylesheet
@@ -41,6 +43,57 @@ class TestNumberedCanvas:
         style = make_stylesheet()["Normal"]
         SimpleDocTemplate(str(tmp_path / "f.pdf")).build([Paragraph("Hello", style)], canvasmaker=Folio)
         assert "1/1" in PdfReader(str(tmp_path / "f.pdf")).pages[0].extract_text()
+
+
+def folio_ends(path):
+    """Where each page's folio ends, and its baseline: its start, read from the PDF, plus its width."""
+    found = []
+    for page in PdfReader(str(path)).pages:
+        spots = []
+
+        def record(text, cm, tm, font_dict, font_size, spots=spots):
+            if text.strip().startswith("Page"):
+                start = tm[4] * cm[0] + cm[4]
+                spots.append((start + stringWidth(text.strip(), "Helvetica", 9), tm[5] * cm[3] + cm[5]))
+
+        page.extract_text(visitor_text=record)
+        found.extend(spots)
+    return found
+
+
+def numbered(path, pagesize, canvasmaker=NumberedCanvas):
+    style = make_stylesheet()["Normal"]
+    SimpleDocTemplate(str(path), pagesize=pagesize).build(
+        [Paragraph("Hello", style)], canvasmaker=canvasmaker
+    )
+    return folio_ends(path)
+
+
+class TestFolioPosition:
+    @pytest.mark.parametrize("pagesize", [A4, letter, landscape(A4)], ids=["A4", "letter", "A4-landscape"])
+    def test_folio_ends_15_mm_from_the_right_edge_of_any_page(self, tmp_path, pagesize):
+        """Up to 1.5.0 it ended at 195 mm, whatever the page."""
+        [(right, baseline)] = numbered(tmp_path / "n.pdf", pagesize)
+        assert right == pytest.approx(pagesize[0] - 15 * mm, abs=0.01)
+        assert baseline == pytest.approx(10 * mm, abs=0.01)
+
+    def test_a4_portrait_keeps_its_folio_where_it_was(self, tmp_path):
+        [(right, _)] = numbered(tmp_path / "n.pdf", A4)
+        assert right == pytest.approx(195 * mm, abs=0.01)
+
+    def test_inset_moves_the_folio_on_every_page_size(self, tmp_path):
+        class Folio(NumberedCanvas):
+            folio_inset = (inch, inch / 2)
+
+        [(right, baseline)] = numbered(tmp_path / "n.pdf", letter, Folio)
+        assert (right, baseline) == pytest.approx((letter[0] - inch, inch / 2), abs=0.01)
+
+    def test_fixed_position_still_pins_the_folio(self, tmp_path):
+        class Folio(NumberedCanvas):
+            folio_position = (300, 40)
+
+        [(right, baseline)] = numbered(tmp_path / "n.pdf", landscape(A4), Folio)
+        assert (right, baseline) == pytest.approx((300, 40), abs=0.01)
 
 
 class TestDirectCanvasUse:

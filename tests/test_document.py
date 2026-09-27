@@ -10,10 +10,11 @@ from pypdf import PdfReader
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import paragraph as platypus_paragraph
 
 from conftest import fill_rgb
-from reportlab_layout import Box, PDFMaker, TextMetrics, add_style
+from reportlab_layout import Box, NumberedCanvas, PDFMaker, TextMetrics, add_style
 
 #: Capitals whose ink runs from the baseline to the cap height and no further,
 #: in Helvetica as in Times: no bowl overshooting, no point dipping below the
@@ -773,6 +774,43 @@ class TestOutput:
     def test_neither_path_nor_file_is_rejected_at_once(self, stylesheet, output):
         with pytest.raises(TypeError, match="path or a binary file object"):
             PDFMaker(output, stylesheet=stylesheet)
+
+
+class TestCanvas:
+    """The canvas a document draws on: built by canvasmaker, or replaced afterwards."""
+
+    def test_canvasmaker_numbers_the_pages(self, out, stylesheet):
+        """PDFMaker used to build its own canvas: NumberedCanvas only served SimpleDocTemplate."""
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet, canvasmaker=NumberedCanvas) as doc:
+            for n in range(150):
+                doc.draw_paragraph(f"Line {n}")
+        texts = [page.extract_text() for page in read(out).pages]
+        total = len(texts)
+        assert total > 1 and "Line 149" in texts[-1]
+        assert all(f"Page {n} of {total}" in text for n, text in enumerate(texts, start=1))
+
+    def test_canvasmaker_is_handed_the_output_and_the_page_size(self, out, stylesheet):
+        calls = []
+
+        def maker(target, **options):
+            calls.append((target, options))
+            return Canvas(target, **options)
+
+        PDFMaker(out, pagesize="letter", stylesheet=stylesheet, canvasmaker=maker)
+        assert calls == [(str(out), {"pagesize": (612.0, 792.0)})]
+
+    def test_drawing_follows_a_replaced_canvas(self, out, stylesheet):
+        """Replacing doc.canvas left draw_string and draw_rect on the old canvas, never saved."""
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.canvas = NumberedCanvas(str(out), pagesize=(doc.width, doc.height))
+        doc.draw_string("Drawn by draw_string", 100, 400)
+        doc.draw_rect(90, 390, 200, 30)
+        doc.draw_paragraph("Laid by draw_paragraph")
+        doc.save()
+        page = read(out).pages[0]
+        text = page.extract_text()
+        assert "Drawn by draw_string" in text and "Laid by draw_paragraph" in text and "Page 1 of 1" in text
+        assert b" re" in page.get_contents().get_data()
 
 
 class TestApplyStyleColour:

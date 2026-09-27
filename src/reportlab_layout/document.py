@@ -17,7 +17,7 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 
 import logging
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol, TypeAlias
 
@@ -144,6 +144,10 @@ class PDFMaker:
         bottom margin.
     :param show_boundaries: outline the box of every element laid down -- for
         debugging a layout.
+    :param canvasmaker: what builds the canvas, called like reportlab's
+        ``Canvas``, with the output and ``pagesize=``: a ``Canvas`` subclass
+        such as :class:`~reportlab_layout.NumberedCanvas`, which stamps "page x
+        of y".
     """
 
     def __init__(
@@ -161,6 +165,7 @@ class PDFMaker:
         stylesheet: StyleSheet1 | None = None,
         auto_page_break: bool = False,
         show_boundaries: bool = False,
+        canvasmaker: Callable[..., pdfcanvas.Canvas] = pdfcanvas.Canvas,
     ) -> None:
         self.geometry = PageGeometry.build(
             pagesize=pagesize,
@@ -171,9 +176,6 @@ class PDFMaker:
             top=top,
             bottom=bottom,
         )
-        self.canvas = pdfcanvas.Canvas(
-            _canvas_target(path), pagesize=(self.geometry.width, self.geometry.height)
-        )
         self.unit = unit
         self.font_size = font_size
         self.stylesheet = stylesheet if stylesheet is not None else STYLES
@@ -181,8 +183,7 @@ class PDFMaker:
         self.show_boundaries = show_boundaries
 
         self.cursor = Cursor(self.geometry.margins.top, self.geometry.bottom_depth)
-        self.shapes = ShapePainter(self.canvas)
-        self.text = TextPainter(self.canvas, self.stylesheet)
+        self.canvas = canvasmaker(_canvas_target(path), pagesize=(self.geometry.width, self.geometry.height))
 
         #: Height :meth:`add_space` adds when called bare, in type sizes.
         self.default_space = 1.0
@@ -194,6 +195,24 @@ class PDFMaker:
 
         self._export_geometry()
         self.canvas.setFontSize(self.font_size)
+
+    @property
+    def canvas(self) -> pdfcanvas.Canvas:
+        """The reportlab canvas everything is drawn on.
+
+        Replacing it moves ``shapes`` and ``text``, the painters behind
+        ``draw_rect`` and ``draw_string``, onto the new canvas too. Left on the
+        old one, which is never saved, their drawings vanished without an
+        error. Replace it before drawing anything, since what the old canvas
+        holds is lost with it -- or pass ``canvasmaker`` to the constructor.
+        """
+        return self._canvas
+
+    @canvas.setter
+    def canvas(self, canvas: pdfcanvas.Canvas) -> None:
+        self._canvas = canvas
+        self.shapes = ShapePainter(canvas)
+        self.text = TextPainter(canvas, self.stylesheet)
 
     def _export_geometry(self) -> None:
         """Copy the page dimensions onto attributes, for readability.
