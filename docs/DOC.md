@@ -689,9 +689,9 @@ header. Both are drawn by `new_page()` and by `save()`.
 
 So the margins are all the room they get. Give the header a `top` margin tall
 enough for it, and the footer a `bottom` margin: anything that sticks out past
-the edge of the page is logged as a warning. The gap between them and the
-content comes from their style: the header's `spaceAfter`, the footer's
-`spaceBefore`.
+the edge of the page is logged as a warning, once per document. The gap between
+them and the content comes from their style: the header's `spaceAfter`, the
+footer's `spaceBefore`.
 
 ```python
 styles = make_stylesheet()
@@ -893,9 +893,19 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
-`reportlab_layout.document` emits page changes and frame creations at `DEBUG`,
-and at `WARNING` a block that cannot split and overflows the page it is laid on;
-`reportlab_layout.frames` reports overflow at `WARNING`.
+`reportlab_layout.document` emits page changes and frame creations at `DEBUG`.
+At `WARNING` it reports what a viewer would not show you:
+
+- an element laid by `draw` — in flow, relative or absolute — that runs past an
+  edge of the page, with the page and the distance:
+  `Table runs off page 1: 440.0 pt past its bottom edge`;
+- a block that cannot split and overflows the content area it is laid in;
+- a header taller than the top margin, or a footer taller than the bottom one,
+  once per document rather than once per page.
+
+The shapes and strings drawn straight onto the canvas — `draw_string`,
+`draw_rect` and the like — are not watched: a background may bleed off the page
+on purpose. `reportlab_layout.frames` reports a frame's overflow at `WARNING`.
 
 ## Migrating from `pdf_maker`
 

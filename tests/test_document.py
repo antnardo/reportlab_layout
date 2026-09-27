@@ -202,6 +202,35 @@ class TestAbsolutePlacement:
         )
 
 
+class TestOffThePage:
+    """An element laid past an edge of the page is logged: a viewer shows nothing of that part."""
+
+    def test_table_running_off_the_bottom_is_logged(self, out, stylesheet, caplog):
+        """30 rows hung from y = 100: 25 of them went under the page without a word."""
+        doc = PDFMaker(out, pagesize="letter", stylesheet=stylesheet)
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.draw_table(
+                [["Name", "Mark"]] * 30, col_widths=[120, 60], x=10, y=100, absolute=True, valign="top"
+            )
+        assert "Table runs off page 1: 440.0 pt past its bottom edge" in caplog.text
+
+    @pytest.mark.parametrize(("x", "y", "edge"), [(-5, 300, "left"), (560, 300, "right"), (100, 830, "top")])
+    def test_every_edge_is_watched(self, doc, caplog, x, y, edge):
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.draw_table([["a", "b"]], col_widths=[30, 30], x=x, y=y, absolute=True)
+        assert f"past its {edge} edge" in caplog.text
+
+    def test_flow_without_page_breaks_is_watched_too(self, doc, caplog):
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.draw_table([["Name", "Mark"]] * 60)
+        assert "past its bottom edge" in caplog.text
+
+    def test_element_up_against_the_edges_logs_nothing(self, doc, caplog):
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            doc.draw_table([["a"]], col_widths=doc.width, row_heights=doc.height, x=0, y=0, absolute=True)
+        assert caplog.records == []
+
+
 #: Set solid, at the usual 1.2, looser, tighter, over three lines, and in Times.
 CAP_STYLES = [
     pytest.param("Helvetica", 15, 15, id="solid"),
@@ -480,6 +509,19 @@ class TestHeaderFooter:
         with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
             doc.save()
         assert "Footer taller than the bottom margin" in caplog.text
+
+    def test_band_too_tall_is_logged_once_however_many_pages(self, out, stylesheet, picture, caplog):
+        """1.5.0 said it again on every page."""
+        doc = PDFMaker(out, top=10, stylesheet=stylesheet)
+        doc.set_header(doc.make_image(picture, height=40))
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
+            for _ in range(3):
+                doc.new_page()
+            doc.save()
+        assert len(read(out).pages) == 4
+        assert [record.getMessage() for record in caplog.records] == [
+            "Header taller than the top margin: 11.7 pt off the page"
+        ]
 
     def test_bands_that_fit_their_margins_log_nothing(self, out, stylesheet, caplog):
         doc = PDFMaker(out, stylesheet=stylesheet)

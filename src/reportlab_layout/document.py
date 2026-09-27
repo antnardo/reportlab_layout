@@ -43,8 +43,9 @@ __all__ = ["OutputLike", "PDFMaker", "Writable"]
 
 logger = logging.getLogger(__name__)
 
-#: How close to the top of the content area the cursor counts as standing on
-#: it, in points: rounding, not space.
+#: A distance below which two positions count as one, in points: rounding, not
+#: space. The cursor stands on the top of the content area, an element keeps
+#: to the page, within it.
 _FUZZ = 1e-6
 
 TableCommand: TypeAlias = tuple[Any, ...]
@@ -189,6 +190,7 @@ class PDFMaker:
         self.footer: list[Flowable] = []
         self.active_frame: Frame | None = None
         self.page = 1
+        self._warned: set[str] = set()
 
         self._export_geometry()
         self.canvas.setFontSize(self.font_size)
@@ -396,6 +398,9 @@ class PDFMaker:
         cursor, over as many pages as it takes, and the box returned is its
         last part's. What cannot split is laid at the top of a page anyway,
         overflowing it, and logged.
+
+        An element that runs off the page, in any mode, is logged as well:
+        what lies past the edge is lost, and the PDF says nothing of it.
         """
         flow = y is None and not absolute
         allow_break = self.auto_page_break if page_break is None else page_break
@@ -410,6 +415,7 @@ class PDFMaker:
             box = self._place(flowable, x, y, width, height, before, absolute, halign, valign, wscale)
 
         self._lay(flowable, box, outline)
+        self._report_off_page(flowable, box)
         if flow:
             self.cursor.advance(
                 box.height + before * self.unit + flowable.getSpaceBefore() + flowable.getSpaceAfter()
@@ -421,6 +427,35 @@ class PDFMaker:
         flowable.drawOn(self.canvas, box.x, box.y)
         if outline:
             self.shapes.rect(*box)
+
+    def _report_off_page(self, flowable: Flowable, box: Box) -> None:
+        """Log an element whose box runs past an edge of the page, and by how much.
+
+        reportlab draws off the page without a word, and a viewer shows nothing
+        of it: 25 rows of a table placed near the bottom went that way, found
+        only by counting them. Only :meth:`draw` checks; the canvas-level
+        ``draw_*`` shapes and strings are left to bleed, as a full-bleed
+        background has to.
+        """
+        past = {
+            "left": -box.x,
+            "right": box.right - self.geometry.width,
+            "bottom": -box.y,
+            "top": box.top - self.geometry.height,
+        }
+        edges = [f"{amount:.1f} pt past its {edge} edge" for edge, amount in past.items() if amount > _FUZZ]
+        if edges:
+            logger.warning("%s runs off page %d: %s", type(flowable).__name__, self.page, ", ".join(edges))
+
+    def _warn_once(self, message: str) -> None:
+        """Log a warning the first time this document meets it, and never again.
+
+        The header and footer are drawn on every page: a band too tall for its
+        margin said so once per page, the same line a hundred times over.
+        """
+        if message not in self._warned:
+            self._warned.add(message)
+            logger.warning(message)
 
     def _draw_over_pages(
         self,
@@ -464,6 +499,7 @@ class PDFMaker:
                 for placement in packing.placements:
                     box = Box(left, top - placement.bottom, placement.width, placement.height)
                     self._lay(placement.flowable, box, outline)
+                    self._report_off_page(placement.flowable, box)
                 self.cursor.advance(packing.height)
                 queue = list(packing.rest)
             elif at_top:
@@ -480,6 +516,7 @@ class PDFMaker:
                     self.cursor.bottom_depth - self.cursor.top,
                     self.page,
                 )
+                self._report_off_page(head, box)
             if queue:
                 self.new_page()
                 at_top = True
@@ -715,14 +752,14 @@ class PDFMaker:
         footer_edge = self.geometry.depth_to_y(self.bottom_depth)
         for flowable, box in self._band(self._as_flowables(self.footer), footer_edge, header=False):
             self._lay(flowable, box, self.show_boundaries)
-            if box.y < 0:
-                logger.warning("Footer taller than the bottom margin: %.1f pt off the page", -box.y)
+            if box.y < -_FUZZ:
+                self._warn_once(f"Footer taller than the bottom margin: {-box.y:.1f} pt off the page")
         header_edge = self.geometry.depth_to_y(self.top)
         for flowable, box in self._band(self._as_flowables(self.header), header_edge, header=True):
             self._lay(flowable, box, self.show_boundaries)
-            if box.top > self.geometry.height:
-                overflow = box.top - self.geometry.height
-                logger.warning("Header taller than the top margin: %.1f pt off the page", overflow)
+            overflow = box.top - self.geometry.height
+            if overflow > _FUZZ:
+                self._warn_once(f"Header taller than the top margin: {overflow:.1f} pt off the page")
 
     def _band(self, flowables: list[Flowable], edge: float, *, header: bool) -> list[tuple[Flowable, Box]]:
         """Where the flowables of a header go, standing on ``edge``, or of a footer, hanging from it.

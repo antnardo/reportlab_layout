@@ -9,6 +9,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 - `repeat_rows` on `make_table` and `draw_table`: the heading rows, repeated at
   the top of every part of a table split across pages.
+- **A warning for an element laid off the page.** reportlab draws past the edge
+  of the page without a word, and a viewer shows nothing of it: a table of 30
+  rows hung from `y=100` lost 25 of them under the page, found only by counting.
+  An element laid by `draw`, in any mode, that runs past an edge of the page is
+  now logged, with the page and the distance: `Table runs off page 1: 440.0 pt
+  past its bottom edge`. The shapes and strings drawn straight onto the canvas
+  are not watched, since a background may bleed on purpose.
+
+### Changed
+
+- A header or footer taller than its margin is reported once per document, no
+  longer once per page with the same figures.
 
 ### Fixed
 
