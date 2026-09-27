@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.6.0] — 2026-09-27
 
 ### Added
 
@@ -24,6 +24,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   are not watched, since a background may bleed on purpose.
 
 ### Changed
+
+- The README no longer counts split tables and `KeepTogether` among what
+  platypus does and this package does not: both work here now. It names what
+  platypus still has alone, and the one policy that differs — platypus splits a
+  flowable the moment it does not fit, this package moves it whole and splits
+  only what no page could hold.
 
 - A header or footer taller than its margin is reported once per document, no
   longer once per page with the same figures.

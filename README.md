@@ -82,6 +82,10 @@ doc.advance(30)                                              # the cursor follow
   to page and end level, as LaTeX's `multicols` does; TrueType families whose
   bold and italic work in markup; images set on the baseline, for formulas
   typeset elsewhere; a tag flush right on the last line of a paragraph.
+- **Nothing falls off the page.** A block taller than the page splits from the
+  cursor over as many pages as it takes, a table between two rows with its
+  heading repeated; one that cannot split starts a fresh page and says so in the
+  log. `canvasmaker=NumberedCanvas` numbers the pages "x of y" in one pass.
 - **Two dependencies**, reportlab and Pillow. No headless browser, no LaTeX, no
   system binary.
 
@@ -106,10 +110,13 @@ doc.advance(30)                                              # the cursor follow
 
 ### What the community already offers
 
-**reportlab platypus** is an excellent package, and it does far more than this
-one: tables split across pages, `KeepTogether`, tables of contents, bookmarks,
-multi-frame templates. If your document is a report that flows from start to
-finish, **use platypus**: this package has nothing to add. The difference comes
+**reportlab platypus** is an excellent package, and it does more than this one:
+tables of contents, bookmarks, and page templates whose frames alternate from
+page to page. It also splits a flowable the moment it does not fit, where this
+package moves it whole and splits only what no page could hold — hand a block to
+`draw_columns` with a single column to split it on demand. If your document is a
+report that flows from start to finish, **use platypus**: this package has
+nothing to add. The difference comes
 down to one point: as soon as you need to alternate free drawing and flow in the
 same gesture, platypus makes you separate the content (the *story*) from the
 decoration (the `onPage` callbacks). Here, everything is written in the order it
