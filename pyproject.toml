@@ -50,8 +50,8 @@ dev = [
     "mypy>=1.11",
 ]
 
-# La version vit dans le module : une seule source, que le workflow de
-# publication compare au tag.
+# The version lives in the module: a single source, which the publish workflow
+# checks against the tag.
 [tool.hatch.version]
 path = "src/reportlab_layout/__init__.py"
 

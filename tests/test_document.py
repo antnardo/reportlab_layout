@@ -322,14 +322,14 @@ class TestPagination:
     def test_auto_page_break_starts_a_second_page(self, out, stylesheet):
         doc = PDFMaker(out, auto_page_break=True, stylesheet=stylesheet)
         for _ in range(80):
-            doc.draw_paragraph("Une ligne parmi beaucoup d'autres.")
+            doc.draw_paragraph("One line among many others.")
         doc.save()
         assert len(read(out).pages) > 1
 
     def test_page_break_false_keeps_everything_on_one_page(self, out, stylesheet):
         doc = PDFMaker(out, auto_page_break=True, stylesheet=stylesheet)
         for _ in range(80):
-            doc.draw_paragraph("Une ligne parmi beaucoup d'autres.", page_break=False)
+            doc.draw_paragraph("One line among many others.", page_break=False)
         doc.save()
         assert len(read(out).pages) == 1
 
