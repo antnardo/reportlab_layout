@@ -701,9 +701,26 @@ doc = PDFMaker("output.pdf", top=25, stylesheet=styles)
 doc.set_header(doc.make_paragraph("Acme Ltd — quarterly report", "Header"))
 ```
 
+A paragraph in the header stands on its descenders, not on the bottom of its
+block. reportlab leaves only `leading − size` under a paragraph's last baseline:
+2 pt in 10/12, where the descenders reach 2.07 pt down, and nothing at all when
+the text is set solid. The header rises by the difference, so that its descent
+line stands `spaceAfter` above the content: by 0.07 pt in 10/12, by 3.3 pt in
+Helvetica 16/16. Under a loose leading the block already clears them, and
+nothing moves.
+
+The descent is the one the font declares, the one `draw_string` anchors
+`bottom` on. The glyphs a viewer draws can reach a hair lower, and a rule drawn
+on the top edge of the content area, such as the top border of a table laid
+first, sticks out above it by half its width: a header right against it still
+touches it. Give the header a `spaceAfter` of a few points there.
+
 When a header or footer holds several flowables, they all line up on the same
 edge instead of stacking. That is how a logo on the left and a centred title
-share one band.
+share one band. Their paragraphs share a baseline — the last line's in a header,
+the first line's in a footer — set as far from the content as the one that needs
+it most, so that a heading and a line of small print side by side read as one
+line. Anything else, an image or a table, keeps its block against the edge.
 
 `doc.header` and `doc.footer` are plain lists; you may assign to them directly.
 `new_page` and `save` call `draw_header_footer` for you; call it yourself only

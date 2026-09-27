@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import paragraph as platypus_paragraph
@@ -442,7 +442,8 @@ class TestHeaderFooter:
         first = doc.draw_paragraph("FIRST BLOCK")
         doc.save()
         lines = baselines(out)
-        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(first.height)
+        expected = first.height + overhang(doc.metrics())
+        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(expected)
 
     def test_header_lies_in_the_top_margin(self, out, stylesheet):
         doc = PDFMaker(out, stylesheet=stylesheet)
@@ -463,7 +464,8 @@ class TestHeaderFooter:
         first = doc.draw_paragraph("FIRST BLOCK")
         doc.save()
         lines = baselines(out)
-        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(first.height + 6)
+        expected = first.height + overhang(doc.metrics("Header")) + 6
+        assert lines["HEADER TEXT"] - lines["FIRST BLOCK"] == pytest.approx(expected)
 
     def test_header_taller_than_the_top_margin_is_logged(self, out, stylesheet, picture, caplog):
         doc = PDFMaker(out, top=10, stylesheet=stylesheet)
@@ -486,6 +488,92 @@ class TestHeaderFooter:
         with caplog.at_level(logging.WARNING, logger="reportlab_layout.document"):
             doc.save()
         assert caplog.records == []
+
+
+def overhang(metrics):
+    """How far a paragraph's descenders reach below its block, where reportlab leaves leading - size."""
+    return max(0.0, -metrics.descent - (metrics.leading - metrics.font_size))
+
+
+#: Header styles as (font, size, leading): the usual 1.2, set solid, and loose.
+HEADER_STYLES = [
+    pytest.param("Helvetica", 10, 12, id="normal"),
+    pytest.param("Helvetica", 12, 12, id="solid-12"),
+    pytest.param("Helvetica-Bold", 16, 16, id="solid-16"),
+    pytest.param("Helvetica-Bold", 24, 24, id="solid-24"),
+    pytest.param("Times-Roman", 14, 14, id="times-solid"),
+    pytest.param("Helvetica", 14, 18, id="loose"),
+]
+
+#: How far below the declared descent the glyphs a viewer draws may reach, as a
+#: fraction of the type size: Apple's Helvetica draws its g 1.4% lower.
+GLYPH_OVERSHOOT = 0.02
+
+
+class TestHeaderDescenders:
+    """A paragraph in the header keeps its descenders, not just its block, out of the content area.
+
+    1.3.0 to 1.5.0 stood the block on the edge. reportlab leaves only
+    leading - size under the last baseline, so the descenders reached below
+    it: over the top rule of a table laid first, by 3.3 pt set solid at 16/16.
+    """
+
+    @pytest.mark.parametrize(("font", "size", "leading"), HEADER_STYLES)
+    @pytest.mark.parametrize("space_after", [0, 6])
+    def test_header_is_as_low_as_its_block_and_descenders_allow(
+        self, out, stylesheet, font, size, leading, space_after
+    ):
+        style = ParagraphStyle("band", fontName=font, fontSize=size, leading=leading, spaceAfter=space_after)
+        doc = PDFMaker(out, top=30, stylesheet=stylesheet)
+        doc.set_header(doc.make_paragraph("Quarterly gypsy report", style))
+        doc.save()
+        baseline = baselines(out)["Quarterly gypsy report"]
+        descent_line = baseline + TextMetrics(style).descent
+        block_bottom = baseline - (leading - size)
+        floor = doc.y_top + space_after
+        assert descent_line >= floor - 1e-9 and block_bottom >= floor - 1e-9
+        assert min(descent_line, block_bottom) == pytest.approx(floor)
+
+    @pytest.mark.ink
+    @pytest.mark.parametrize("size", [16, 24])
+    def test_ink_of_a_header_set_solid_stays_in_the_margin(self, out, stylesheet, ink, size):
+        style = ParagraphStyle("band", fontName="Helvetica-Bold", fontSize=size, leading=size)
+        geometry = {"unit": 1, "left": 10, "right": 10, "top": 40, "bottom": 5}
+        with PDFMaker(out, pagesize=(200, 100), stylesheet=stylesheet, **geometry) as doc:
+            doc.set_header(doc.make_paragraph("gypsy", style))
+        assert ink(out).bottom >= doc.y_top - GLYPH_OVERSHOOT * size
+
+    def test_header_paragraphs_share_their_last_baseline(self, out, stylesheet):
+        """A heading 14/18 beside a 10/12 line sat 2 pt above it: each block stood on the edge."""
+        left = ParagraphStyle("left", fontName="Helvetica-Bold", fontSize=14, leading=18, spaceAfter=6)
+        right = ParagraphStyle("right", fontSize=10, leading=12, alignment=TA_RIGHT, spaceAfter=6)
+        doc = PDFMaker(out, top=25, stylesheet=stylesheet)
+        doc.set_header(
+            [
+                doc.make_paragraph("Acme Ltd", left),
+                doc.make_paragraph("Quarterly report<br/>September 2026", right),
+            ]
+        )
+        doc.save()
+        lines = baselines(out)
+        assert lines["Acme Ltd"] == pytest.approx(lines["September 2026"])
+        assert lines["Acme Ltd"] - (18 - 14) == pytest.approx(doc.y_top + 6)
+
+    def test_footer_paragraphs_share_their_first_baseline(self, out, stylesheet):
+        left = ParagraphStyle("left", fontName="Helvetica-Bold", fontSize=14, leading=18)
+        right = ParagraphStyle("right", fontSize=10, leading=12, alignment=TA_RIGHT)
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_footer([doc.make_paragraph("Acme Ltd", left), doc.make_paragraph("Page 3<br/>of 12", right)])
+        doc.save()
+        lines = baselines(out)
+        assert lines["Page 3"] == pytest.approx(lines["Acme Ltd"])
+        assert lines["Acme Ltd"] == pytest.approx(doc.y_bottom - 14)
+
+    def test_lone_footer_hangs_where_it_did(self, out, stylesheet):
+        doc = PDFMaker(out, stylesheet=stylesheet)
+        doc.set_footer(doc.make_paragraph("FOOTER TEXT"))
+        doc.save()
+        assert baselines(out)["FOOTER TEXT"] == pytest.approx(doc.y_bottom - doc.metrics().font_size)
 
 
 class TestTables:

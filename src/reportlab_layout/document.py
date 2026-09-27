@@ -88,31 +88,39 @@ def _canvas_target(output: OutputLike) -> str | Writable:
     raise TypeError(f"Expected a path or a binary file object, got {type(output).__name__}")
 
 
+def _baselines(paragraph: Paragraph, height: float) -> tuple[float, float]:
+    """Heights, above the bottom of its block, of a wrapped paragraph's first and last baselines.
+
+    reportlab hangs the first baseline one type size below the top of the block
+    and leaves ``leading - size`` under the last. The first line drops by the
+    ascent instead of the size when ``paraFontSizeHeightOffset`` is off: the
+    flag is read where reportlab's drawing code reads it. The line pitch is read
+    back from the block rather than from the style, because ``autoLeading``
+    changes it. The font and size are the style's: a size changed by markup
+    inside the paragraph is not accounted for. The paragraph holds a line at
+    least.
+    """
+    metrics = TextMetrics(paragraph.style)
+    drop = metrics.font_size if platypus_paragraph.paraFontSizeHeightOffset else metrics.ascent
+    lines = len(paragraph.blPara.lines)
+    first = height - drop
+    return first, first - (lines - 1) * height / lines
+
+
 def _cap_middle(paragraph: Paragraph, height: float) -> float:
     """Height, above the bottom of its block, of the middle of a wrapped paragraph's capitals.
 
     The capitals run from the cap height of the first line down to the
-    baseline of the last. reportlab hangs the first baseline one type size
-    below the top of the block and leaves ``leading - size`` under the last, so
-    the middle of that span lies ``size - (leading + cap height) / 2`` below the
-    middle of the block, whatever the number of lines: 2.1 pt low for Helvetica
-    15 set solid, 1.3 pt high for Helvetica 12 on 18.
-
-    The first line drops by the ascent instead of the size when
-    ``paraFontSizeHeightOffset`` is off: the flag is read where reportlab's
-    drawing code reads it. The line pitch is read back from the block rather
-    than from the style, because ``autoLeading`` changes it. The font and size
-    are the style's: a size changed by markup inside the paragraph is not
-    accounted for.
+    baseline of the last. Since reportlab hangs the first baseline one type
+    size below the top of the block and leaves ``leading - size`` under the
+    last, the middle of that span lies ``size - (leading + cap height) / 2``
+    below the middle of the block, whatever the number of lines: 2.1 pt low for
+    Helvetica 15 set solid, 1.3 pt high for Helvetica 12 on 18.
     """
-    lines = len(paragraph.blPara.lines)
-    if not lines:
+    if not paragraph.blPara.lines:
         return height / 2
-    metrics = TextMetrics(paragraph.style)
-    drop = metrics.font_size if platypus_paragraph.paraFontSizeHeightOffset else metrics.ascent
-    first_baseline = height - drop
-    last_baseline = first_baseline - (lines - 1) * height / lines
-    return (first_baseline + metrics.cap_height + last_baseline) / 2
+    first, last = _baselines(paragraph, height)
+    return (first + TextMetrics(paragraph.style).cap_height + last) / 2
 
 
 class PDFMaker:
@@ -695,23 +703,80 @@ class PDFMaker:
         whatever sticks out past the page edge is logged.
 
         The gap to the content is the header style's ``spaceAfter`` and the
-        footer's ``spaceBefore``. Several flowables share one edge rather than
-        stacking: a logo on the left and a centred title make a single band.
+        footer's ``spaceBefore``. A paragraph in the header keeps it under its
+        descenders as well as under its block, which reportlab ends above them
+        unless the leading is loose. Several flowables share one edge rather
+        than stacking: a logo on the left and a centred title make a single
+        band, and the paragraphs of a band share one baseline, the last line's
+        in a header, the first line's in a footer.
 
         Called for you by :meth:`new_page` and :meth:`save`.
         """
-        for flowable in self._as_flowables(self.footer):
-            box = self.draw(flowable, y=self.bottom_depth / self.unit, page_break=False)
+        footer_edge = self.geometry.depth_to_y(self.bottom_depth)
+        for flowable, box in self._band(self._as_flowables(self.footer), footer_edge, header=False):
+            self._lay(flowable, box, self.show_boundaries)
             if box.y < 0:
                 logger.warning("Footer taller than the bottom margin: %.1f pt off the page", -box.y)
-        top_edge = self.geometry.depth_to_y(self.top)
-        for flowable in self._as_flowables(self.header):
-            box = self.draw(
-                flowable, x=self.left, y=top_edge + flowable.getSpaceAfter(), absolute=True, page_break=False
-            )
+        header_edge = self.geometry.depth_to_y(self.top)
+        for flowable, box in self._band(self._as_flowables(self.header), header_edge, header=True):
+            self._lay(flowable, box, self.show_boundaries)
             if box.top > self.geometry.height:
                 overflow = box.top - self.geometry.height
                 logger.warning("Header taller than the top margin: %.1f pt off the page", overflow)
+
+    def _band(self, flowables: list[Flowable], edge: float, *, header: bool) -> list[tuple[Flowable, Box]]:
+        """Where the flowables of a header go, standing on ``edge``, or of a footer, hanging from it.
+
+        Each block keeps clear of the edge by its gap, a header's
+        ``spaceAfter``, a footer's ``spaceBefore``. A paragraph in a header also
+        keeps its descenders clear of it: reportlab leaves only
+        ``leading - size`` under the last baseline, 2 pt in 10/12 for a descent
+        of 2.07, none at all set solid, so that a block standing on the edge
+        reached into the content area and over the rule of a table laid first.
+        The descent is the font's own, the one ``draw_string`` anchors on.
+
+        The paragraphs of a band then share one baseline: the last line's in a
+        header, the first line's in a footer, set as far from the content as
+        the one that needs it most. Lining their blocks up instead left a 14/18
+        heading 2 pt above a 10/12 line beside it, since each style leaves its
+        own room under its last line. Anything else -- an image, a table --
+        keeps its block against the edge, clear by its gap.
+        """
+        wrapped = []
+        for flowable in flowables:
+            width, height = flowable.wrapOn(self.canvas, self.content_width, self.height)
+            text = isinstance(flowable, Paragraph) and bool(flowable.blPara.lines)
+            first, last = _baselines(flowable, height) if text else (0.0, 0.0)
+            wrapped.append((flowable, width, height, text, first, last))
+
+        placed = []
+        if header:
+            # The last baselines rise until every paragraph's descent line clears the edge.
+            baseline = max(
+                (
+                    edge + flowable.getSpaceAfter() + max(last, -TextMetrics(flowable.style).descent)
+                    for flowable, _, _, text, _, last in wrapped
+                    if text
+                ),
+                default=edge,
+            )
+            for flowable, width, height, text, _, last in wrapped:
+                bottom = baseline - last if text else edge + flowable.getSpaceAfter()
+                placed.append((flowable, Box(self.left, bottom, width, height)))
+            return placed
+        # The first baselines sink to the lowest one, so that every block still hangs clear.
+        baseline = min(
+            (
+                edge - flowable.getSpaceBefore() - (height - first)
+                for flowable, _, height, text, first, _ in wrapped
+                if text
+            ),
+            default=edge,
+        )
+        for flowable, width, height, text, first, _ in wrapped:
+            bottom = baseline - first if text else edge - flowable.getSpaceBefore() - height
+            placed.append((flowable, Box(self.left, bottom, width, height)))
+        return placed
 
     # ------------------------------------------------------------------
     # Frames

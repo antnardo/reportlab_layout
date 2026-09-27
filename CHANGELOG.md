@@ -22,6 +22,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   between two lines, a table between two rows. What cannot split, such as an
   image, is laid at the top of a page and logged. A block that a page can hold
   still moves to the next one whole, as before.
+- **The header's descenders stay out of the content area.** Since 1.3.0 the
+  header's block stood on the top edge of the content area, but reportlab
+  leaves only `leading − size` under a paragraph's last baseline — 2 pt in 10/12
+  for a descent of 2.07 pt, nothing when set solid. The descenders hung below
+  the block, over a line of text or a table laid first: 3.4 pt deep in
+  Helvetica-Bold 16/16. A paragraph in the header now stands on its descent
+  line: it rises by 0.07 pt in 10/12, by 3.3 pt in 16/16, and not at all under a
+  loose leading. The top rule of a table, drawn on the edge, still sticks out
+  above it by half its width: a header right against one wants a `spaceAfter`.
+- **The paragraphs of a header or footer share a baseline.** Several flowables
+  in a band stood on the edge block by block, so that a 14/18 heading beside a
+  10/12 line sat 2 pt higher, and 4 pt lower in a footer. The last lines of the
+  header's paragraphs now share a baseline, and the first lines of the
+  footer's. A band whose paragraphs are set alike does not move for it.
 - **`halign` in absolute mode.** `draw_table(..., x=306, absolute=True,
   halign="center")` left the table's left edge on 306 whatever `halign` said,
   and `halign="sideways"` went through without a word: `halign` was only read
