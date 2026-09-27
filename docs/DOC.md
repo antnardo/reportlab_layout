@@ -799,6 +799,8 @@ then moves under them, and the box they cover on that page is returned.
   column, none counted at its bottom.
 - A `FrameBreak` in the story ends its column; a `KeepTogether` moves its
   content to the next column when it does not fit in what is left of this one.
+  One that no column can hold, met at the top of a page, lets its content
+  split over the columns, as if it were not grouped.
 - A flowable whose style asks `keepWithNext` — a heading — stays with the next
   one, as in a `SimpleDocTemplate`: platypus does that in its document
   template, so the columns bind such runs themselves (`keep_with_next`).
@@ -853,7 +855,8 @@ canvas ordinate is `top_of_the_columns - placement.top`.
 
 `overflow=True` lays down a flowable that cannot split and does not fit an empty
 column anyway, rather than leaving it in `rest` for ever — what `draw_columns`
-does for columns as tall as the page.
+does for columns as tall as the page. A `KeepTogether`, which has nothing to
+draw, gives way to its flowables there instead.
 
 ## Page "x of y" numbering
 

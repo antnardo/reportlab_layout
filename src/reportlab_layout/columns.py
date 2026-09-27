@@ -24,6 +24,14 @@ which the columns do without, so they group such runs themselves.
 A flowable that cannot split and is taller than a whole column is laid down
 anyway, overflowing its column, and reported in the log: it is neither lost nor
 sent into an endless loop.
+
+A split is taken when its first part fits, however many parts it has: a
+``KeepTogether`` around a single flowable hands that flowable back alone. The
+part that fits is placed next, which keeps the packing moving even past a
+flowable that splits into a copy of itself, as tall as before. A
+``KeepTogether`` has nothing to draw, so it never overflows: at the top of a
+column as tall as the page, where no column could hold its flowables together,
+it gives way to them, and each splits or overflows on its own.
 """
 
 import logging
@@ -93,7 +101,8 @@ def pack_columns(
     Nothing is drawn: the flowables are wrapped, and split where a column ends.
     With ``overflow``, a flowable that cannot split and does not fit an empty
     column is laid down anyway, overflowing it: meant for columns as tall as the
-    page, where waiting for more room would never end.
+    page, where waiting for more room would never end. A ``KeepTogether`` gives
+    way to its flowables there instead.
     """
     queue = keep_with_next(story)
     placements: list[Placement] = []
@@ -121,10 +130,12 @@ def pack_columns(
             parts = head.splitOn(canvas, width, room) if room > _FUZZ else []
             if at_top:
                 # A KeepTogether too tall for the column asks for a break first: at the
-                # top of a column, that would only leave the column empty.
-                while parts and isinstance(parts[0], ActionFlowable):
+                # top of a column, that would only leave the column empty. A lone action
+                # stays, so that an empty KeepTogether leaves the queue.
+                while len(parts) > 1 and isinstance(parts[0], ActionFlowable):
                     parts.pop(0)
-            if len(parts) > 1 and _fits(canvas, parts[0], width, room):
+            gives_way = at_top and overflow and isinstance(head, KeepTogether)
+            if gives_way or (parts and _fits(canvas, parts[0], width, room)):
                 queue[0:1] = parts
                 continue
             if at_top and overflow:

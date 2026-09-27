@@ -71,6 +71,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   to — and an unknown value raises `ValueError` in every mode, as the 1.4.0
   entry said it already did. A call that passed `"center"` or `"right"` with
   `absolute=True` moves; one that passed `"left"`, or nothing, does not.
+- **A `KeepTogether` around a single flowable no longer fails.**
+  `draw_columns([KeepTogether([paragraph])])` raised `AttributeError:
+  'KeepTogether' object has no attribute 'draw'`, as did
+  `draw(KeepTogether([paragraph]))` with `auto_page_break`, which splits through
+  the same packing. `pack_columns` only took a split into two parts or more, a
+  `KeepTogether` hands its only flowable back alone, and the packing ended up
+  laying the `KeepTogether` itself, which has nothing to draw. A split is now
+  taken whatever its number of parts, provided the first one fits, and an empty
+  `KeepTogether` is dropped.
+- **A `KeepTogether` taller than the page flows over the columns.** At the top
+  of a page, one whose first flowable no column could hold failed in the same
+  way, or, with more flowables after it, had that one laid whole: 3,000 words
+  set as a single paragraph 6,780 pt tall, most of it below the page. It now
+  gives way to its flowables there, which split over the columns and pages as
+  if they were not grouped; a platypus frame does the same. Anywhere else, it
+  still waits for a column that holds it whole.
 
 ## [1.5.0] — 2026-09-26
 

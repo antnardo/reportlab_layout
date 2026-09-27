@@ -11,6 +11,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
+from reportlab.platypus import KeepTogether
 from reportlab.platypus import paragraph as platypus_paragraph
 
 from conftest import fill_rgb
@@ -442,6 +443,12 @@ class TestTooTallForAPage:
         with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
             box = doc.draw_table(marks(60), page_break=False)
         assert len(read(out).pages) == 1 and box.height == pytest.approx(60 * 18)
+
+    def test_keep_together_around_one_paragraph_is_drawn(self, out, stylesheet):
+        # A KeepTogether reports 16777215 pt on purpose, to be split: it comes this way.
+        with PDFMaker(out, auto_page_break=True, stylesheet=stylesheet) as doc:
+            doc.draw(KeepTogether([doc.make_paragraph("ALONE")]))
+        assert len(read(out).pages) == 1 and page_text(out).split() == ["ALONE"]
 
 
 class TestHeaderFooter:

@@ -6,7 +6,7 @@ import pytest
 from pypdf import PdfReader
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen.canvas import Canvas
-from reportlab.platypus import FrameBreak, KeepTogether, Paragraph
+from reportlab.platypus import CondPageBreak, FrameBreak, KeepTogether, Paragraph
 from reportlab.platypus.flowables import Flowable
 
 from reportlab_layout import PDFMaker, balanced_height, keep_with_next, pack_columns
@@ -17,6 +17,15 @@ STYLE = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=12)
 def lines(count, prefix="line"):
     """One-line paragraphs, easy to count and to find."""
     return [Paragraph(f"{prefix} {n}", STYLE) for n in range(count)]
+
+
+def words(count):
+    return [f"word{n}" for n in range(count)]
+
+
+def long_paragraph(count=60):
+    """A paragraph of ``count`` words, some 300 pt tall in a 100 pt column."""
+    return Paragraph(" ".join(words(count)), STYLE)
 
 
 def page_words(path):
@@ -49,6 +58,18 @@ class Block(Flowable):
         self.canv.rect(0, 0, self.width, self.height)
 
 
+class Copying(Block):
+    """A block that splits into a fresh copy of itself, as tall: taking that split never ends."""
+
+    def __init__(self, width, height, generation=0):
+        super().__init__(width, height)
+        self.generation = generation
+
+    def split(self, available_width, available_height):
+        assert self.generation < 50, "the packer keeps splitting the copies"
+        return [Copying(self.width, self.height, self.generation + 1)]
+
+
 @pytest.fixture
 def canvas(tmp_path):
     return Canvas(str(tmp_path / "scratch.pdf"))
@@ -66,8 +87,7 @@ class TestPackColumns:
         assert len(packing.rest) == 2
 
     def test_long_paragraph_split_between_columns(self, canvas):
-        paragraph = Paragraph(" ".join(f"word{n}" for n in range(60)), STYLE)
-        packing = pack_columns(canvas, [paragraph], 100, 60, 2)
+        packing = pack_columns(canvas, [long_paragraph()], 100, 60, 2)
         assert {p.column for p in packing.placements} == {0, 1}
 
     def test_frame_break_ends_the_column(self, canvas):
@@ -79,6 +99,47 @@ class TestPackColumns:
         packing = pack_columns(canvas, story, 100, 60, 2)
         kept = [p for p in packing.placements if p.column == 1]
         assert kept and not packing.rest
+
+    @pytest.mark.parametrize("overflow", [False, True])
+    @pytest.mark.parametrize("before", [0, 2])
+    def test_keep_together_around_one_flowable_lays_that_flowable(self, canvas, before, overflow):
+        # Its split is that flowable alone: a single part, which up to 1.5.0 counted as no split.
+        alone = Paragraph("alone", STYLE)
+        story = [*lines(before), KeepTogether([alone])]
+        packing = pack_columns(canvas, story, 100, 60, 2, overflow=overflow)
+        assert packing.placements[-1].flowable is alone and packing.rest == ()
+
+    @pytest.mark.parametrize("before", [0, 2])
+    def test_empty_keep_together_is_dropped(self, canvas, before):
+        story = [*lines(before), KeepTogether([]), *lines(2, "after")]
+        packing = pack_columns(canvas, story, 100, 60, 2)
+        assert [p.column for p in packing.placements] == [0] * (before + 2) and packing.rest == ()
+
+    @pytest.mark.parametrize("after", [0, 1])
+    def test_keep_together_too_tall_at_the_top_of_a_page_gives_way_to_its_flowables(self, canvas, after):
+        # With overflow, the columns are as tall as the page: no column holds the group together.
+        story = [KeepTogether([long_paragraph(), *lines(after, "after")])]
+        packing = pack_columns(canvas, story, 100, 60, 2, overflow=True)
+        assert [(p.column, type(p.flowable)) for p in packing.placements] == [(0, Paragraph), (1, Paragraph)]
+
+    def test_keep_together_too_tall_waits_without_overflow(self, canvas):
+        story = [KeepTogether([long_paragraph()])]
+        packing = pack_columns(canvas, story, 100, 60, 2)
+        assert packing.placements == () and packing.rest == tuple(story)
+
+    @pytest.mark.parametrize("overflow", [False, True])
+    def test_block_splitting_into_a_copy_of_itself_stays_whole(self, canvas, overflow):
+        block = Copying(50, 200)
+        packing = pack_columns(canvas, [block, *lines(2)], 100, 60, 2, overflow=overflow)
+        kept = [p.flowable for p in packing.placements] + list(packing.rest)
+        assert [flowable for flowable in kept if isinstance(flowable, Copying)] == [block]
+
+    @pytest.mark.parametrize(("before", "columns"), [(2, [0, 0, 0, 0]), (3, [0, 0, 0, 1, 1])])
+    def test_cond_page_break_ends_the_column_only_when_short_of_room(self, canvas, before, columns):
+        # Out of a document template it takes what is left of the column, when that is too little.
+        story = [*lines(before), CondPageBreak(30), *lines(2, "after")]
+        packing = pack_columns(canvas, story, 100, 60, 2)
+        assert [p.column for p in packing.placements if isinstance(p.flowable, Paragraph)] == columns
 
     def test_heading_kept_with_the_next_flowable(self, canvas):
         heading = ParagraphStyle("heading", parent=STYLE, keepWithNext=1)
@@ -192,6 +253,24 @@ class TestDrawColumns:
         doc.save()
         pages = page_words(out)
         assert pages[0] == [] and len(pages[1]) == 4
+
+    def test_keep_together_around_one_paragraph_is_drawn(self, out):
+        doc = PDFMaker(out)
+        doc.draw_columns([KeepTogether([Paragraph("alone", STYLE)])])
+        doc.save()
+        assert [word for word, _, _ in page_words(out)[0]] == ["alone"]
+
+    @pytest.mark.parametrize("after", [[], ["after"]])
+    def test_keep_together_taller_than_the_page_flows_over_pages(self, out, after):
+        # 1.5.0 failed on the first, and laid the long paragraph of the second 6,000 pt tall.
+        story = [KeepTogether([long_paragraph(800), *(Paragraph(word, STYLE) for word in after)])]
+        doc = PDFMaker(out)
+        doc.draw_columns(story)
+        doc.save()
+        pages = page_words(out)
+        found = [word for page in pages for text, _, _ in page for word in text.split()]
+        assert len(pages) > 1 and found == words(800) + after
+        assert all(y > doc.y_bottom for page in pages for _, _, y in page)
 
     def test_three_columns(self, out):
         doc = PDFMaker(out)
