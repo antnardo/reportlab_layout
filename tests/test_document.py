@@ -160,6 +160,46 @@ class TestAbsolutePlacement:
         with pytest.raises(ValueError, match="valign must be"):
             doc.draw_paragraph("Hello", x=100, y=200, width=200, absolute=True, valign="center")
 
+    @pytest.mark.parametrize(("halign", "share"), [("left", 0), ("center", 0.5), ("right", 1)])
+    def test_halign_puts_that_point_of_the_element_on_x(self, doc, halign, share):
+        """1.5.0 left the left edge on x whatever halign said."""
+        box = doc.draw_table(
+            [["Name", "Mark"]], col_widths=[120, 60], x=306, y=400, absolute=True, halign=halign
+        )
+        assert box.x + share * box.width == pytest.approx(306)
+
+    def test_halign_centres_a_paragraph_block_on_x(self, doc):
+        box = doc.draw_paragraph("Hello", x=300, y=200, width=200, absolute=True, halign="center")
+        assert box.x == pytest.approx(200)
+
+    def test_unknown_halign_is_rejected_here_too(self, doc):
+        """1.5.0 only refused it in flow."""
+        with pytest.raises(ValueError, match="halign must be"):
+            doc.draw_table([["a", "b"]], x=306, y=400, absolute=True, halign="sideways")
+
+    @pytest.mark.ink
+    @pytest.mark.parametrize(("halign", "share"), [("left", 0), ("center", 0.5), ("right", 1)])
+    def test_ink_of_a_table_lands_where_halign_says(self, out, ink, halign, share):
+        rule = 1
+        with PDFMaker(out, pagesize=PAGE, unit=1, left=10, right=10, top=5, bottom=5) as doc:
+            doc.draw_table(
+                [["A", "B"]],
+                col_widths=[60, 30],
+                row_heights=40,
+                style=[("GRID", (0, 0), (-1, -1), rule, "black")],
+                x=PAGE[0] / 2,
+                y=PAGE[1] / 2,
+                absolute=True,
+                halign=halign,
+                valign="middle",
+            )
+        measured = ink(out)
+        # The rules stick out of the table by half their width on either side.
+        expected = PAGE[0] / 2 + (share - 0.5) * rule
+        assert measured.left + share * (measured.right - measured.left) == pytest.approx(
+            expected, abs=INK_TOLERANCE
+        )
+
 
 #: Set solid, at the usual 1.2, looser, tighter, over three lines, and in Times.
 CAP_STYLES = [
@@ -186,16 +226,16 @@ class TestCapAnchor:
     @pytest.mark.parametrize(("font", "size", "leading"), CAP_STYLES)
     def test_ink_is_centred_on_y_whatever_the_leading(self, out, ink, font, size, leading):
         centre_on_page(out, font, size, leading)
-        bottom, top = ink(out)
-        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2, abs=INK_TOLERANCE)
+        measured = ink(out)
+        assert (measured.bottom + measured.top) / 2 == pytest.approx(PAGE[1] / 2, abs=INK_TOLERANCE)
 
     @pytest.mark.ink
     def test_middle_leaves_capitals_set_solid_low(self, out, ink):
         """The flaw "cap" corrects: reportlab keeps a whole type size above the first baseline."""
         metrics = centre_on_page(out, "Helvetica", 15, 15, valign="middle")
-        bottom, top = ink(out)
+        measured = ink(out)
         sink = (metrics.font_size - metrics.cap_height) / 2
-        assert (bottom + top) / 2 == pytest.approx(PAGE[1] / 2 - sink, abs=INK_TOLERANCE)
+        assert (measured.bottom + measured.top) / 2 == pytest.approx(PAGE[1] / 2 - sink, abs=INK_TOLERANCE)
 
     def test_one_line_shares_the_baseline_of_draw_string(self, out, stylesheet):
         """A one-line title and a label anchored the same way line up."""

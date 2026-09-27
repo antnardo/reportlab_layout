@@ -3,6 +3,19 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`halign` in absolute mode.** `draw_table(..., x=306, absolute=True,
+  halign="center")` left the table's left edge on 306 whatever `halign` said,
+  and `halign="sideways"` went through without a word: `halign` was only read
+  in flow. It now says what `x` refers to, as it does for `draw_string` — the
+  element's left edge, its middle or its right edge, from the width it wraps
+  to — and an unknown value raises `ValueError` in every mode, as the 1.4.0
+  entry said it already did. A call that passed `"center"` or `"right"` with
+  `absolute=True` moves; one that passed `"left"`, or nothing, does not.
+
 ## [1.5.0] — 2026-09-26
 
 ### Added

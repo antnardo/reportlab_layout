@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 from PIL import Image as PILImage
@@ -41,30 +42,46 @@ def picture(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
-def ink(tmp_path: Path) -> Callable[[Path], tuple[float, float]]:
-    """Measure where the ink of a PDF's first page lands, by rasterising it.
+class Ink(NamedTuple):
+    """The bounding box of the ink on a page, as canvas coordinates in points."""
 
-    Gives a function that returns the ``(bottom, top)`` of the ink, as canvas
-    ordinates in points. The ink is what the eye centres: it checks the
-    placement and the font metrics together, where reading positions back out
-    of the PDF only checks the arithmetic. Needs ``pdftoppm`` (poppler), which
-    draws the standard fonts with what the system has: Apple's own on macOS,
-    where the measurements in the documentation were made, and the URW clones
-    on Linux.
+    left: float
+    bottom: float
+    right: float
+    top: float
+
+
+@pytest.fixture
+def ink(tmp_path: Path) -> Callable[..., Ink | None]:
+    """Measure where the ink of a PDF page lands, by rasterising it.
+
+    Gives a function ``measure(path, page=1, dpi=INK_DPI)`` that returns the
+    ``Ink`` of that page, or ``None`` when nothing is drawn on it. The ink is
+    what the eye sees: it checks the placement and the font metrics together,
+    where reading positions back out of the PDF only checks the arithmetic.
+    Needs ``pdftoppm`` (poppler), which draws the standard fonts with what the
+    system has: Apple's own on macOS, where the measurements in the
+    documentation were made, and the URW clones on Linux.
+
+    A whole page at 1200 dpi is a 140-megapixel image: measure the edges of a
+    page-sized layout at a lower ``dpi``, whose pixel is ``72 / dpi`` points.
     """
     if shutil.which("pdftoppm") is None:
         pytest.skip("pdftoppm (poppler) is not installed")
 
-    def measure(path: Path) -> tuple[float, float]:
-        stem = tmp_path / f"{path.stem}-ink"
-        command = ["pdftoppm", "-r", str(INK_DPI), "-gray", "-singlefile", str(path), str(stem)]
+    def measure(path: Path, page: int = 1, dpi: int = INK_DPI) -> Ink | None:
+        stem = tmp_path / f"{path.stem}-{page}-ink"
+        pages = ["-f", str(page), "-l", str(page)]
+        command = ["pdftoppm", "-r", str(dpi), "-gray", *pages, "-singlefile", str(path), str(stem)]
         subprocess.run(command, check=True, capture_output=True)
-        with PILImage.open(stem.with_suffix(".pgm")) as page:
-            _, top, _, bottom = page.point(lambda value: 255 if value <= 250 else 0).getbbox()
-        page_height = float(PdfReader(path).pages[0].mediabox.height)
-        scale = INK_DPI / 72
-        return page_height - bottom / scale, page_height - top / scale
+        with PILImage.open(stem.with_suffix(".pgm")) as image:
+            box = image.point(lambda value: 255 if value <= 250 else 0).getbbox()
+        if box is None:
+            return None
+        left, top, right, bottom = box
+        page_height = float(PdfReader(path).pages[page - 1].mediabox.height)
+        scale = dpi / 72
+        return Ink(left / scale, page_height - bottom / scale, right / scale, page_height - top / scale)
 
     return measure
 

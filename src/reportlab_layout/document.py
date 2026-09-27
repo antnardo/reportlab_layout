@@ -337,13 +337,7 @@ class PDFMaker:
         is" for ``y``.
         """
         x = self.left if x is None else x * self.unit
-        free = (1 - wscale) * self.content_width
-        if halign == "right":
-            x += free
-        elif halign == "center":
-            x += free / 2
-        elif halign != "left":
-            raise ValueError(f"halign must be 'left', 'center' or 'right', got {halign!r}")
+        x += self._halign_offset((1 - wscale) * self.content_width, halign)
         depth = self.cursor.depth + before * self.unit if y is None else y * self.unit
         return x, self.geometry.depth_to_y(depth) - height - space_before
 
@@ -367,6 +361,12 @@ class PDFMaker:
 
         The cursor only moves when the element was placed in flow, that is when
         ``y`` is ``None`` and ``absolute`` is false.
+
+        In flow, ``halign`` places a block ``wscale`` content widths wide
+        across the content width. In absolute mode it says what ``x`` refers
+        to instead, as it does for :meth:`draw_string`: the element's left edge
+        (``"left"``, the default), its middle (``"center"``) or its right edge
+        (``"right"``), from the width the element wraps to.
 
         ``valign`` only applies in absolute mode and says what ``y`` refers to:
         the element's bottom (``"bottom"``, the default), its middle
@@ -415,12 +415,30 @@ class PDFMaker:
         if absolute:
             if x is None or y is None:
                 raise ValueError("absolute=True needs explicit x and y, in points")
-            offset = self._valign_offset(flowable, actual_height, valign)
-            return Box(x, y - offset, actual_width, actual_height)
+            left = x - self._halign_offset(actual_width, halign)
+            bottom = y - self._valign_offset(flowable, actual_height, valign)
+            return Box(left, bottom, actual_width, actual_height)
         anchor_x, anchor_y = self._anchor(
             x, y, actual_height, before, flowable.getSpaceBefore(), halign, wscale
         )
         return Box(anchor_x, anchor_y, actual_width, actual_height)
+
+    @staticmethod
+    def _halign_offset(width: float, halign: str) -> float:
+        """Distance from the left edge of an element ``width`` wide to the point ``halign`` names.
+
+        Absolute mode moves the element back by it, so that its named point
+        lands on ``x``. Flow moves a ``wscale`` block forward by the offset of
+        the width it leaves free: the block's named point then lands on the
+        content area's.
+        """
+        if halign == "left":
+            return 0.0
+        if halign == "center":
+            return width / 2
+        if halign == "right":
+            return width
+        raise ValueError(f"halign must be 'left', 'center' or 'right', got {halign!r}")
 
     @staticmethod
     def _valign_offset(flowable: Flowable, height: float, valign: str) -> float:

@@ -164,6 +164,15 @@ doc.draw_paragraph("Capitals centred on y.",    x=100, y=200, width=200, absolut
 A paragraph's text does not sit in the middle of its block: `cap` centres the
 capitals instead. See [`cap` on a paragraph](#cap-on-a-paragraph).
 
+`halign` says what `x` refers to, as it does for `draw_string`: the element's
+left edge (the default), its middle, or its right edge. The width is the one the
+element wraps to — a table's columns, an image's width, a paragraph's `width`:
+
+```python
+doc.draw_table(rows, col_widths=[120, 60], x=doc.width / 2, y=700, absolute=True, halign="center")
+doc.draw_image(logo, width=40 * mm, x=doc.x_right, y=doc.y_top, absolute=True, halign="right", valign="top")
+```
+
 ## Laying down flowables
 
 ```python
@@ -182,7 +191,7 @@ The keywords `draw` shares with all of them:
 | `width`, `height` | the space offered to the flowable for its wrapping |
 | `before` | space added before, in `unit` |
 | `absolute` | raw canvas coordinates |
-| `halign` | `"left"`, `"center"`, `"right"` — works with `wscale` |
+| `halign` | `"left"`, `"center"`, `"right"` — with `wscale` in flow; in absolute mode, the point of the element on `x` |
 | `valign` | `"bottom"`, `"middle"`, `"top"`, and `"cap"` for a paragraph — **in absolute mode only** |
 | `wscale` | fraction of the content width the block occupies |
 | `page_break` | `None` follows `auto_page_break`; `True`/`False` force it |
@@ -196,10 +205,11 @@ x, y, width, height = box            # unpacks as a plain 4-tuple
 box.right, box.top, box.center       # bottom-left corner plus conveniences
 ```
 
-`wscale` and `halign` go together: `wscale=0.5, halign="right"` lays a
-half-width block against the right margin. `halign` places a block `wscale`
-content widths wide and never looks at the element's own width, so on its own
-it does nothing. To centre an image, see [Images](#images).
+In flow, `wscale` and `halign` go together: `wscale=0.5, halign="right"` lays a
+half-width block against the right margin. There `halign` places a block
+`wscale` content widths wide and never looks at the element's own width, so on
+its own it does nothing. To centre an image, see [Images](#images). In absolute
+mode, `halign` uses the element's width and `wscale` is ignored.
 
 ### Factories
 
@@ -537,7 +547,13 @@ width = 60 * mm
 doc.draw_image(spec, width=width, wscale=width / doc.content_width, halign="center")
 ```
 
-The same goes for a table narrower than the content width.
+The same goes for a table narrower than the content width. In absolute mode,
+`halign="center"` centres the image on `x` from its own width, with nothing
+else to give:
+
+```python
+doc.draw_image(spec, width=60 * mm, x=doc.width / 2, y=400, absolute=True, halign="center")
+```
 
 ## Images inside a line
 
