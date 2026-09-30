@@ -3,6 +3,41 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] — 2026-09-30
+
+### Added
+
+- **`dash` on every shape**, with `dash_phase`: `draw_rect(..., dash=(4, 3))`
+  dashes an outline 4 pt on, 3 pt off. The pattern repeats for as long as the
+  outline runs, the phase starts it part-way through so that two dashed lines
+  need not line up, and an empty pattern goes back to solid. Left at `None` the
+  canvas setting stands.
+- **`line_cap` on `draw_line` and `draw_polygon`**, beside the `line_join` that
+  was already there: 0 butt, 1 round, 2 square. It finishes the ends of an open
+  path, which a closed shape has none of. A round cap is what a freehand stroke,
+  a highlighter or a hand-drawn tick wants. Rounding or squaring extends the
+  stroke half its width past each end, which the `Box` returned does not count.
+- **`outline` on `draw_string`**, a faux bold for a family with no bold face:
+  `outline=0.4` strokes the glyphs as well as filling them, 0.4 pt wide. The
+  stroke takes the text's own colour, so the glyphs thicken rather than gain an
+  outline of another colour. Measured on the rendered ink, 0.6 pt lays 38 % more
+  of it. A real bold face beats this whenever there is one: a drawn bold
+  thickens every stroke equally, where a designed one does not.
+- **An image needs no file.** Raw bytes, an open binary file and a Pillow image
+  go everywhere a path goes — the new `ImageLike`. Transparency survives, which
+  is what a stamp tinted on a transparent ground needs. A Pillow image is
+  encoded to PNG on the way, lossless and carrying the alpha; bytes are passed
+  on untouched, so a page already recompressed as JPEG is not re-encoded; a file
+  stays a path, which lets reportlab inline a JPEG as it stands. `ImageSpec`
+  gained a `data` field and its `path` may now be `None`. Each draw hands
+  reportlab a fresh buffer, so one spec draws many times.
+
+### Changed
+
+- `inline_image` raises `ValueError` for an image held in memory, naming the
+  reason: a paragraph's `<img/>` tag takes a file name. It is the one place a
+  file is still required.
+
 ## [1.6.0] — 2026-09-27
 
 ### Added

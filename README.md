@@ -77,7 +77,7 @@ doc.advance(30)                                              # the cursor follow
 - **The two coordinate systems kept apart.** The canvas ordinate goes up, the
   cursor depth goes down; `PageGeometry` is the only place that converts.
 - **Nothing leaks.** Every drawing is wrapped in `saveState`/`restoreState`, so
-  a colour or a line width never contaminates the next call.
+  a colour, a line width or a dash pattern never contaminates the next call.
 - **What a report needs and reportlab lacks.** Columns that carry on from page
   to page and end level, as LaTeX's `multicols` does; TrueType families whose
   bold and italic work in markup; images set on the baseline, for formulas
