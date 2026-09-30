@@ -13,25 +13,42 @@ which has to sit on the baseline of the line around it, its depth below.
 for the image, which takes ``autoLeading="max"`` on the paragraph's style, and
 an :class:`~reportlab_layout.InlineParagraph` when the image may land on the
 first line.
+
+An image needs no file: raw bytes, an open binary file and a Pillow image all
+work, and their transparency survives. A page recompressed in memory, or a
+stamp tinted on a transparent ground, never has to be written to disk first.
 """
 
+import io
+import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO, TypeAlias
 from xml.sax.saxutils import quoteattr
 
 import PIL.Image as PILImage
 from reportlab.platypus import Image
 
-__all__ = ["ImageSpec", "image_spec", "inline_image", "load_image"]
+__all__ = ["ImageLike", "ImageSpec", "image_spec", "inline_image", "load_image"]
+
+#: Anything this package can draw as an image: a path, the bytes of an encoded
+#: image, an open binary file, or a Pillow image.
+ImageLike: TypeAlias = "str | os.PathLike[str] | bytes | IO[bytes] | PILImage.Image | ImageSpec"
 
 
 @dataclass(frozen=True, slots=True)
 class ImageSpec:
-    """An image's path and its size in pixels."""
+    """Where an image comes from, and its size in pixels.
 
-    path: Path
+    It holds either a ``path`` or the encoded ``data``, never both. An image
+    read from a file is kept as a path, so reportlab can inline a JPEG as it
+    stands instead of re-encoding it.
+    """
+
+    path: Path | None
     width: int
     height: int
+    data: bytes | None = None
 
     @property
     def aspect(self) -> float:
@@ -63,28 +80,47 @@ class ImageSpec:
         raise ValueError("Give one of width, height or scale")
 
 
-def image_spec(path: str | Path) -> ImageSpec:
-    """Read the pixel size of the image at ``path``."""
-    path = Path(path)
-    with PILImage.open(path) as image:
+def image_spec(source: ImageLike) -> ImageSpec:
+    """Read an image's pixel size, from wherever it comes.
+
+    A path is kept as a path. Bytes and an open binary file are kept as they
+    are. A Pillow image is encoded to PNG, which is lossless and carries an
+    alpha channel, since reportlab reads an encoded image rather than a Pillow
+    one.
+    """
+    if isinstance(source, ImageSpec):
+        return source
+    if isinstance(source, str | os.PathLike):
+        path = Path(source)
+        with PILImage.open(path) as image:
+            width, height = image.size
+        return ImageSpec(path=path, width=width, height=height)
+    if isinstance(source, PILImage.Image):
+        buffer = io.BytesIO()
+        source.save(buffer, "PNG")
+        return ImageSpec(path=None, width=source.width, height=source.height, data=buffer.getvalue())
+    data = source if isinstance(source, bytes) else source.read()
+    with PILImage.open(io.BytesIO(data)) as image:
         width, height = image.size
-    return ImageSpec(path=path, width=width, height=height)
+    return ImageSpec(path=None, width=width, height=height, data=data)
 
 
 def load_image(
-    spec: ImageSpec | str | Path,
+    spec: ImageLike,
     width: float | None = None,
     height: float | None = None,
     scale: float | None = None,
 ) -> Image:
     """Return an ``Image`` flowable sized in points.
 
-    ``spec`` may be an :class:`ImageSpec` already read, or just a path.
+    ``spec`` may be an :class:`ImageSpec` already read, or anything
+    :func:`image_spec` accepts. An image held in memory is handed to reportlab
+    through a fresh buffer each call, so the same spec can be drawn many times.
+    Transparency is kept: reportlab's default mask reads the alpha channel.
     """
-    if not isinstance(spec, ImageSpec):
-        spec = image_spec(spec)
+    spec = image_spec(spec)
     draw_width, draw_height = spec.scaled(width=width, height=height, scale=scale)
-    image = Image(str(spec.path))
+    image = Image(io.BytesIO(spec.data) if spec.data is not None else str(spec.path))
     image.drawWidth = draw_width
     image.drawHeight = draw_height
     return image
@@ -114,6 +150,12 @@ def inline_image(
         if not isinstance(spec, ImageSpec):
             spec = image_spec(spec)
         width, height = spec.scaled(width=width, height=height, scale=scale)
-    path = spec.path if isinstance(spec, ImageSpec) else Path(spec)
+    spec = image_spec(spec)
+    if spec.path is None:
+        raise ValueError(
+            "inline_image needs an image on disk: a paragraph's <img/> tag takes a file name, "
+            "not bytes. Write it to a file, or draw it with draw_image."
+        )
+    path = spec.path
     size = f'width="{width:.3f}" height="{height:.3f}"'
     return f'<img src={quoteattr(str(path))} {size} valign="{0.0 - depth:.3f}"/>'

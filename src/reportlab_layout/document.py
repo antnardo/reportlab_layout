@@ -18,7 +18,6 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
-from pathlib import Path
 from typing import Any, Protocol, TypeAlias
 
 from reportlab.lib.styles import StyleSheet1
@@ -34,7 +33,7 @@ from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, pack_
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import PageGeometry
-from reportlab_layout.images import ImageSpec, load_image
+from reportlab_layout.images import ImageLike, load_image
 from reportlab_layout.metrics import TextMetrics
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, resolve_style
@@ -392,7 +391,7 @@ class PDFMaker:
 
     def make_image(
         self,
-        spec: ImageSpec | str | Path,
+        spec: ImageLike,
         width: float | None = None,
         height: float | None = None,
         scale: float | None = None,
@@ -693,7 +692,7 @@ class PDFMaker:
 
     def draw_image(
         self,
-        spec: ImageSpec | str | Path,
+        spec: ImageLike,
         width: float | None = None,
         height: float | None = None,
         scale: float | None = None,
@@ -933,7 +932,7 @@ class PDFMaker:
 
     def frame_image(
         self,
-        spec: ImageSpec | str | Path,
+        spec: ImageLike,
         width: float = 50 * mm,
         space: float = 0,
         halign: str = "CENTER",

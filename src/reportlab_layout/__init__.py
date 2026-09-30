@@ -22,7 +22,13 @@ from reportlab_layout.document import OutputLike, PDFMaker, Writable
 from reportlab_layout.fonts import register_font_family
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import Margins, PageGeometry, resolve_pagesize
-from reportlab_layout.images import ImageSpec, image_spec, inline_image, load_image
+from reportlab_layout.images import (
+    ImageLike,
+    ImageSpec,
+    image_spec,
+    inline_image,
+    load_image,
+)
 from reportlab_layout.metrics import (
     TextMetrics,
     baseline_offset,
@@ -46,6 +52,7 @@ __all__ = [
     "ColorLike",
     "Cursor",
     "FrameWriter",
+    "ImageLike",
     "ImageSpec",
     "InlineParagraph",
     "Margins",
