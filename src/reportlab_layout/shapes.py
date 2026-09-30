@@ -1,12 +1,14 @@
 """Geometric primitives: rules, rectangles, rounded rectangles, ellipses, polygons.
 
-Every drawing is wrapped in ``saveState`` / ``restoreState``, so the colour and
-line width chosen here do not leak into whatever is drawn next.
+Every drawing is wrapped in ``saveState`` / ``restoreState``, so the colour, the
+line width and the dash pattern chosen here do not leak into whatever is drawn
+next.
 """
 
 import math
 from collections.abc import Sequence
 
+from reportlab.lib.colors import Color
 from reportlab.pdfgen.canvas import FILL_NON_ZERO, Canvas
 
 from reportlab_layout.boxes import Box
@@ -21,15 +23,75 @@ class ShapePainter:
     def __init__(self, canvas: Canvas) -> None:
         self._canvas = canvas
 
+    def _pen(
+        self,
+        *,
+        fill: ColorLike,
+        stroke: ColorLike,
+        line_width: float,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
+        line_cap: int | None = None,
+        line_join: int | None = None,
+    ) -> tuple[Color | None, Color | None]:
+        """Set the canvas pen and return the resolved ``(fill, stroke)`` colours.
+
+        Call it inside a ``saveState`` block. A colour left at ``None`` means
+        "do not paint that part", which is why the colours come back: each
+        drawing call needs them to decide whether to fill and whether to stroke.
+        ``dash``, ``line_cap`` and ``line_join`` left at ``None`` leave the
+        canvas setting alone.
+        """
+        canvas = self._canvas
+        canvas.setLineWidth(line_width)
+        if dash is not None:
+            # An empty pattern is reportlab's way of going back to a solid line.
+            canvas.setDash(list(dash), dash_phase)
+        if line_cap is not None:
+            canvas.setLineCap(line_cap)
+        if line_join is not None:
+            canvas.setLineJoin(line_join)
+        fill_color, stroke_color = to_color(fill), to_color(stroke)
+        if fill_color is not None:
+            canvas.setFillColor(fill_color)
+        if stroke_color is not None:
+            canvas.setStrokeColor(stroke_color)
+        return fill_color, stroke_color
+
     def line(
-        self, x1: float, y1: float, x2: float, y2: float, *, stroke: ColorLike = None, line_width: float = 0.5
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        *,
+        stroke: ColorLike = None,
+        line_width: float = 0.5,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
+        line_cap: int | None = None,
     ) -> Box:
-        """Draw a line segment. Returns its bounding box."""
+        """Draw a line segment. Returns its bounding box.
+
+        ``dash`` is reportlab's pattern, in points: ``(2, 2)`` alternates two on
+        and two off, ``dash_phase`` starting the pattern part-way through. An
+        empty pattern goes back to a solid line.
+
+        ``line_cap`` takes reportlab's codes -- 0 butt, 1 round, 2 square -- and
+        says how the ends are finished. A round cap is what a freehand stroke, a
+        highlighter or a tick wants; it extends half the line width past each
+        end, which the box returned does not account for.
+        """
         canvas = self._canvas
         canvas.saveState()
-        canvas.setLineWidth(line_width)
-        if (color := to_color(stroke)) is not None:
-            canvas.setStrokeColor(color)
+        self._pen(
+            fill=None,
+            stroke=stroke,
+            line_width=line_width,
+            dash=dash,
+            dash_phase=dash_phase,
+            line_cap=line_cap,
+        )
         canvas.line(x1, y1, x2, y2)
         canvas.restoreState()
         return Box(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
@@ -44,17 +106,18 @@ class ShapePainter:
         fill: ColorLike = None,
         stroke: ColorLike = "black",
         line_width: float = 0.5,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
     ) -> Box:
-        """Draw a rectangle. ``fill=None`` leaves the inside empty."""
+        """Draw a rectangle. ``fill=None`` leaves the inside empty.
+
+        ``dash`` dashes the outline; see :meth:`line`.
+        """
         canvas = self._canvas
-        fill_color = to_color(fill)
-        stroke_color = to_color(stroke)
         canvas.saveState()
-        canvas.setLineWidth(line_width)
-        if fill_color is not None:
-            canvas.setFillColor(fill_color)
-        if stroke_color is not None:
-            canvas.setStrokeColor(stroke_color)
+        fill_color, stroke_color = self._pen(
+            fill=fill, stroke=stroke, line_width=line_width, dash=dash, dash_phase=dash_phase
+        )
         canvas.rect(
             x, y, width, height, fill=int(fill_color is not None), stroke=int(stroke_color is not None)
         )
@@ -72,22 +135,21 @@ class ShapePainter:
         fill: ColorLike = None,
         stroke: ColorLike = "black",
         line_width: float = 0.5,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
     ) -> Box:
         """Draw a rectangle with rounded corners.
 
         ``radius`` is clamped to half the shorter side: beyond that the arcs
-        overlap and the path folds back on itself.
+        overlap and the path folds back on itself. ``dash`` dashes the outline;
+        see :meth:`line`.
         """
         radius = max(0.0, min(radius, abs(width) / 2, abs(height) / 2))
         canvas = self._canvas
-        fill_color = to_color(fill)
-        stroke_color = to_color(stroke)
         canvas.saveState()
-        canvas.setLineWidth(line_width)
-        if fill_color is not None:
-            canvas.setFillColor(fill_color)
-        if stroke_color is not None:
-            canvas.setStrokeColor(stroke_color)
+        fill_color, stroke_color = self._pen(
+            fill=fill, stroke=stroke, line_width=line_width, dash=dash, dash_phase=dash_phase
+        )
         path = canvas.beginPath()
         path.moveTo(x + radius, y)
         path.lineTo(x + width - radius, y)
@@ -115,6 +177,8 @@ class ShapePainter:
         fill: ColorLike = None,
         stroke: ColorLike = "black",
         line_width: float = 0.5,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
     ) -> Box:
         """Draw an ellipse **centred** on ``(x, y)``. Returns its bounding box.
 
@@ -127,14 +191,10 @@ class ShapePainter:
             raise ValueError(f"radii must be positive, got ({radius_x}, {radius_y})")
 
         canvas = self._canvas
-        fill_color = to_color(fill)
-        stroke_color = to_color(stroke)
         canvas.saveState()
-        canvas.setLineWidth(line_width)
-        if fill_color is not None:
-            canvas.setFillColor(fill_color)
-        if stroke_color is not None:
-            canvas.setStrokeColor(stroke_color)
+        fill_color, stroke_color = self._pen(
+            fill=fill, stroke=stroke, line_width=line_width, dash=dash, dash_phase=dash_phase
+        )
         canvas.ellipse(
             x - radius_x,
             y - radius_y,
@@ -160,6 +220,9 @@ class ShapePainter:
         close: bool = True,
         fill_mode: int = FILL_NON_ZERO,
         line_join: int | None = None,
+        line_cap: int | None = None,
+        dash: Sequence[float] | None = None,
+        dash_phase: float = 0,
     ) -> Box:
         """Draw a polygon through ``points``. Returns their bounding box.
 
@@ -171,21 +234,25 @@ class ShapePainter:
         at ``None`` the canvas setting stands. Sharp points at a small size tend
         to look better rounded, since a mitre spike can extend well past the
         vertex.
+
+        ``line_cap`` finishes the two free ends of an open path -- it does
+        nothing on a closed one, which has none. ``dash`` dashes the outline;
+        both are described on :meth:`line`.
         """
         if len(points) < 3:
             raise ValueError(f"a polygon needs at least 3 points, got {len(points)}")
 
         canvas = self._canvas
-        fill_color = to_color(fill)
-        stroke_color = to_color(stroke)
         canvas.saveState()
-        canvas.setLineWidth(line_width)
-        if line_join is not None:
-            canvas.setLineJoin(line_join)
-        if fill_color is not None:
-            canvas.setFillColor(fill_color)
-        if stroke_color is not None:
-            canvas.setStrokeColor(stroke_color)
+        fill_color, stroke_color = self._pen(
+            fill=fill,
+            stroke=stroke,
+            line_width=line_width,
+            dash=dash,
+            dash_phase=dash_phase,
+            line_cap=line_cap,
+            line_join=line_join,
+        )
 
         path = canvas.beginPath()
         path.moveTo(*points[0])

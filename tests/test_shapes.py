@@ -121,3 +121,73 @@ class TestToColor:
     def test_wrong_length_tuple_is_rejected(self):
         with pytest.raises(ValueError, match="3 or 4"):
             to_color((1, 2))
+
+
+def spy(canvas, name):
+    """Record the calls made to one canvas method, and let them through.
+
+    reportlab keeps no readable trace of the dash pattern -- `_lineDash` stays
+    None whatever you set -- so the call itself is what there is to check.
+    """
+    calls = []
+    original = getattr(canvas, name)
+
+    def record(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+
+    setattr(canvas, name, record)
+    return calls
+
+
+class TestPen:
+    """dash, line_cap and line_join, and the state they must not leave behind."""
+
+    def test_dash_reaches_the_canvas(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.line(0, 0, 10, 0, dash=(2, 2), dash_phase=1)
+        assert calls == [(([2, 2], 1), {})]
+
+    def test_line_cap_is_set_while_drawing(self, painter):
+        seen = []
+        original = painter._canvas.line
+        painter._canvas.line = lambda *a: seen.append(painter._canvas._lineCap) or original(*a)
+        painter.line(0, 0, 10, 0, line_cap=1)
+        assert seen == [1]
+
+    def test_line_cap_does_not_leak(self, painter):
+        before = painter._canvas._lineCap
+        painter.line(0, 0, 10, 0, line_cap=1)
+        assert painter._canvas._lineCap == before
+
+    def test_dash_on_a_rectangle_outline(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.rect(0, 0, 10, 10, dash=(4, 3))
+        assert calls == [(([4, 3], 0), {})]
+
+    def test_dash_on_a_rounded_rectangle(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.round_rect(0, 0, 20, 10, dash=(1, 1))
+        assert calls == [(([1, 1], 0), {})]
+
+    def test_dash_on_an_ellipse(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.ellipse(10, 10, 5, 3, dash=(1, 2))
+        assert calls == [(([1, 2], 0), {})]
+
+    def test_an_open_polygon_takes_a_cap(self, painter):
+        seen = []
+        original = painter._canvas.drawPath
+        painter._canvas.drawPath = lambda *a, **k: seen.append(painter._canvas._lineCap) or original(*a, **k)
+        painter.polygon([(0, 0), (10, 0), (5, 8)], close=False, line_cap=1)
+        assert seen == [1]
+
+    def test_a_star_passes_the_pattern_through(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.regular_polygon(10, 10, 5, vertices=5, leap=2, dash=(2, 2))
+        assert calls == [(([2, 2], 0), {})]
+
+    def test_no_pattern_leaves_the_canvas_alone(self, painter):
+        calls = spy(painter._canvas, "setDash")
+        painter.rect(0, 0, 10, 10)
+        assert calls == []
