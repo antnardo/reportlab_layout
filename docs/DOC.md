@@ -310,6 +310,7 @@ doc.draw_string(
     halign="left",     # left | center | right
     valign="baseline", # baseline | middle | cap | top | bottom
     angle=0,           # rotation about the anchor, counterclockwise
+    outline=0,         # stroke the glyphs this wide as well: a faux bold
     dx=0, dy=0,        # nudge after anchoring, for optical corrections
 )
 ```
@@ -515,14 +516,16 @@ Canvas coordinates, in points. Every call returns a `Box` and leaves no state
 behind on the canvas.
 
 ```python
-doc.draw_line(x1, y1, x2, y2, stroke="black", line_width=0.5)
+doc.draw_line(x1, y1, x2, y2, stroke="black", line_width=0.5, line_cap=None)
 doc.draw_rect(x, y, w, h, fill=None, stroke="black", line_width=0.5)
 doc.draw_round_rect(x, y, w, h, radius=5, fill=None, stroke="black", line_width=0.5)
 doc.draw_ellipse(x, y, radius_x, radius_y, fill=None, stroke="black", line_width=0.5)
 doc.draw_circle(x, y, radius, fill=None, stroke="black", line_width=0.5)
-doc.draw_polygon(points, close=True, fill_mode=FILL_NON_ZERO, line_join=None)
+doc.draw_polygon(points, close=True, fill_mode=FILL_NON_ZERO, line_join=None, line_cap=None)
 doc.draw_regular_polygon(x, y, radius, vertices=5, leap=1, start_angle=90)
 ```
+
+Every one of them also takes `dash` and `dash_phase`.
 
 `fill=None` leaves the inside empty; `stroke=None` drops the outline. Colours
 accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
@@ -553,6 +556,34 @@ doc.draw_regular_polygon(x, y, 20, vertices=5, leap=2, fill="black", fill_mode=0
 a small size usually read better rounded, a mitre spike extending well past the
 vertex.
 
+### Dashes and line ends
+
+`dash` is reportlab's pattern, in points, and every shape takes it:
+
+```python
+doc.draw_rect(x, y, w, h, dash=(4, 3))          # 4 pt on, 3 pt off
+doc.draw_line(x1, y, x2, y, dash=(1, 2), dash_phase=0.5)
+```
+
+The pattern repeats for as long as the outline runs; `dash_phase` starts it
+part-way through, which is how two dashed lines are kept from lining up. An
+empty pattern goes back to a solid line. Left at `None`, whatever the canvas
+already carries stands.
+
+`line_cap` finishes the ends of an **open** path — a line, or a polygon drawn
+with `close=False`. A closed shape has no ends, and ignores it.
+
+| `line_cap` | |
+| --- | --- |
+| 0 | butt: the stroke stops dead on the end point |
+| 1 | round: a half-disc caps each end |
+| 2 | square: a half-square caps each end |
+
+Both 1 and 2 extend the stroke by half its width beyond each end point — a 10 pt
+wide line comes out 10 pt longer overall — which the `Box` returned does not
+count. A round cap is what a freehand stroke, a highlighter or a hand-drawn tick
+wants: a butt end on a thick stroke reads as a cut.
+
 ## Images
 
 ```python
@@ -566,6 +597,31 @@ doc.draw_image(spec, width=30 * mm)  # aspect ratio preserved
 doc.draw_image("logo.png", height=20 * mm)
 doc.draw_image(spec, scale=0.5)
 ```
+
+An image needs no file. Raw bytes, an open binary file and a Pillow image go
+everywhere a path goes — that is the `ImageLike` of the signatures:
+
+```python
+doc.draw_image(pil_image, width=40 * mm)          # a Pillow image
+doc.draw_image(png_bytes, width=40 * mm)          # the bytes of an encoded image
+doc.draw_image(open("scan.jpg", "rb"), width=40 * mm)
+```
+
+Transparency survives: what the alpha channel leaves clear shows the page
+through, which is what a stamp tinted on a transparent ground needs. A Pillow
+image is encoded to PNG on the way, since reportlab reads an encoded image
+rather than a Pillow one; PNG is lossless and carries the alpha. Bytes are
+passed on as they are, so a page already recompressed as JPEG is not re-encoded.
+An image read from a file stays a path, which lets reportlab inline a JPEG
+untouched.
+
+`image_spec` tells the two apart: a spec built from a file has a `path` and no
+`data`, one built from memory the reverse. Each `draw_image` hands reportlab a
+fresh buffer, so one spec can be drawn as many times as you like.
+
+Only [`inline_image`](#images-inside-a-line) still wants a file: a paragraph's
+`<img/>` tag takes a file name, and an image held in memory raises `ValueError`
+rather than being silently written to a temporary file.
 
 Giving `width` **and** `height` forces the ratio, which is sometimes what you
 want. Giving none of them raises `ValueError` rather than guessing.
@@ -1067,7 +1123,8 @@ when you want several figures at once, since it computes them from one lookup.
 | Name | What it is | Where |
 | --- | --- | --- |
 | `ShapePainter` | rules, rectangles, ellipses and polygons, behind `doc.shapes` | [Shapes](#shapes) |
-| `ImageSpec` | an image's path and pixel size, read once | [Images](#images) |
+| `ImageLike` | what an image may be given as: a path, bytes, an open file, a Pillow image | [Images](#images) |
+| `ImageSpec` | where an image comes from and its pixel size, read once | [Images](#images) |
 | `image_spec` | reads that size from a file | [Images](#images) |
 | `load_image` | an `Image` flowable sized in points, aspect ratio kept | [Images](#images) |
 | `inline_image` | the `<img/>` tag of an image standing on the baseline | [Images inside a line](#images-inside-a-line) |
