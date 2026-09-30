@@ -91,3 +91,53 @@ class TestDefaultColour:
     def test_colour_none_keeps_the_current_fill(self, painter):
         painter._canvas.setFillColorRGB(0, 0, 1)
         assert ink_colour(painter, color=None) == (0, 0, 1)
+
+
+class TestOutline:
+    """A faux bold: the glyphs are stroked as well as filled."""
+
+    def render_mode(self, painter, **kwargs) -> int:
+        """The text render mode in force when the string is drawn.
+
+        drawString goes through a text object too, at mode 0 -- fill only.
+        """
+        modes = []
+        original = painter._canvas.drawText
+
+        def record(text_object):
+            modes.append(text_object._textRenderMode)
+            return original(text_object)
+
+        painter._canvas.drawText = record
+        painter.draw("Hello", 10, 10, **kwargs)
+        return modes[0]
+
+    def test_without_outline_the_glyphs_are_only_filled(self, painter):
+        assert self.render_mode(painter) == 0
+
+    def test_outline_selects_fill_and_stroke(self, painter):
+        assert self.render_mode(painter, outline=0.4) == 2
+
+    def test_outline_sets_the_line_width(self, painter):
+        widths = []
+        original = painter._canvas.drawText
+        painter._canvas.drawText = lambda t: widths.append(painter._canvas._lineWidth) or original(t)
+        painter.draw("Hello", 10, 10, outline=0.7)
+        assert widths == [0.7]
+
+    def test_the_stroke_takes_the_text_colour(self, painter):
+        strokes = []
+        original = painter._canvas.drawText
+        painter._canvas.drawText = lambda t: strokes.append(fill_rgb(painter._canvas)) or original(t)
+        painter.draw("Hello", 10, 10, color=(1, 0, 0), outline=0.4)
+        assert strokes == [(1, 0, 0)]
+
+    def test_the_box_stays_the_metric_box(self, painter):
+        plain = painter.draw("Hello", 10, 10)
+        bold = painter.draw("Hello", 10, 10, outline=0.6)
+        assert tuple(bold) == pytest.approx(tuple(plain))
+
+    def test_outline_does_not_leak_the_line_width(self, painter):
+        before = painter._canvas._lineWidth
+        painter.draw("Hello", 10, 10, outline=0.6)
+        assert painter._canvas._lineWidth == before

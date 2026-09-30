@@ -44,6 +44,7 @@ class TextPainter:
         halign: str = "left",
         valign: str = "baseline",
         angle: float = 0,
+        outline: float = 0,
         dx: float = 0,
         dy: float = 0,
     ) -> Box:
@@ -63,7 +64,17 @@ class TextPainter:
         ``angle`` rotates the text about the anchor point, counterclockwise:
         ``90`` reads bottom-to-top.
 
-        Returns the em box the string occupies. With a non-zero ``angle`` that
+        ``outline`` strokes the glyphs as well as filling them, the stroke that
+        many points wide: a faux bold, for a family that has no bold face of its
+        own. 0.4 pt is about right at text sizes. The stroke takes ``color`` too,
+        so the glyphs thicken rather than gain an outline of another colour;
+        with ``color=None`` the canvas's own stroke colour applies. A real bold
+        face beats this whenever there is one -- the strokes of a drawn bold are
+        not all thickened equally, and its shapes differ.
+
+        Returns the em box the string occupies, which is the metric box: the
+        advance width and the em height, neither of them counting the half
+        ``outline`` the stroke adds all round. With a non-zero ``angle`` that
         box is the one **before** rotation, relative to the translated anchor.
         """
         metrics = self.metrics(style, scale)
@@ -78,7 +89,19 @@ class TextPainter:
         canvas.setFont(metrics.font_name, metrics.font_size)
         if (fill := to_color(color)) is not None:
             canvas.setFillColor(fill)
-        canvas.drawString(left, baseline, text)
+        if outline > 0:
+            # Render mode 2 fills then strokes each glyph. drawString cannot ask
+            # for it; only a text object can.
+            canvas.setLineWidth(outline)
+            if fill is not None:
+                canvas.setStrokeColor(fill)
+            text_object = canvas.beginText(left, baseline)
+            text_object.setFont(metrics.font_name, metrics.font_size)
+            text_object.setTextRenderMode(2)
+            text_object.textOut(text)
+            canvas.drawText(text_object)
+        else:
+            canvas.drawString(left, baseline, text)
         canvas.restoreState()
 
         return Box(left, baseline + metrics.descent, metrics.width(text), metrics.height)
