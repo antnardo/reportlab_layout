@@ -3,6 +3,31 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-10-04
+
+### Changed
+
+- **Images and page streams are written in binary, no longer in ASCII85.**
+  reportlab encodes them in ASCII85 by default, which keeps a PDF to 7-bit text
+  at the cost of a quarter more bytes — and no transport in use today needs
+  that; a mail attachment is base64-encoded by the mail itself. Measured on a
+  page scanned as a JPEG, ASCII85 adds 24.8 %: every PDF built by `PDFMaker` now
+  comes out about a fifth smaller, and stays valid. `ascii85=True` gives
+  reportlab's encoding back.
+
+  reportlab has no per-document setting, only the process-wide
+  `rl_config.useA85`, read when each image is drawn and when each page is
+  written. So a document holds it off from construction to the end of `save()`,
+  or of a `with` block even when it fails, or until it is dropped. Several
+  documents open at once keep it off until the last is done, then give back the
+  value it had. Two consequences: while a document is open, any other PDF built
+  in the same process comes out binary too, valid and smaller; and
+  `ascii85=True` leaves the switch alone rather than forcing it on, so it gets
+  ASCII85 only when no other document is open.
+
+  The output bytes change for every document. Anything that compares PDFs byte
+  for byte needs new references, or `ascii85=True`.
+
 ## [1.7.0] — 2026-09-30
 
 ### Added
