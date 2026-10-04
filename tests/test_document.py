@@ -1,5 +1,6 @@
 """The cursor document: flow, absolute placement, pagination."""
 
+import gc
 import io
 import logging
 import re
@@ -7,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
+from reportlab import rl_config
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -946,3 +948,83 @@ class TestApplyStyleColour:
         doc.canvas.setFillColorRGB(1, 1, 1)
         doc.apply_style("Small", color=None)
         assert fill_rgb(doc.canvas) == (1, 1, 1)
+
+
+class TestAscii85:
+    """Binary streams by default, ASCII85 on request, and the global switch given back.
+
+    The suite-wide fixture in conftest checks that no test leaves reportlab's
+    process-wide switch held; these tests check what it is while documents
+    are open.
+    """
+
+    def build(self, path, picture, **kwargs):
+        doc = PDFMaker(path, **kwargs)
+        doc.draw_image(picture, width=200)
+        doc.draw_paragraph("Hello")
+        doc.save()
+        return path.read_bytes()
+
+    def test_default_output_is_binary(self, tmp_path, picture):
+        assert b"/ASCII85Decode" not in self.build(tmp_path / "b.pdf", picture)
+
+    def test_ascii85_true_writes_ascii85(self, tmp_path, picture):
+        assert b"/ASCII85Decode" in self.build(tmp_path / "a.pdf", picture, ascii85=True)
+
+    def test_binary_output_is_smaller(self, tmp_path, picture):
+        ascii85 = self.build(tmp_path / "a.pdf", picture, ascii85=True)
+        binary = self.build(tmp_path / "b.pdf", picture)
+        assert len(binary) < len(ascii85)
+
+    def test_binary_output_is_still_a_readable_pdf(self, tmp_path, picture):
+        path = tmp_path / "b.pdf"
+        self.build(path, picture)
+        assert "Hello" in PdfReader(str(path)).pages[0].extract_text()
+
+    def test_the_switch_is_off_while_a_document_is_open(self, tmp_path):
+        doc = PDFMaker(tmp_path / "b.pdf")
+        assert rl_config.useA85 == 0
+        doc.save()
+
+    def test_save_gives_the_switch_back(self, tmp_path, picture):
+        before = rl_config.useA85
+        self.build(tmp_path / "b.pdf", picture)
+        assert rl_config.useA85 == before
+
+    def test_a_failing_with_block_gives_it_back_too(self, tmp_path):
+        before = rl_config.useA85
+        with pytest.raises(RuntimeError), PDFMaker(tmp_path / "b.pdf"):
+            raise RuntimeError("boom")
+        assert rl_config.useA85 == before
+
+    def test_the_last_of_two_open_documents_restores_it(self, tmp_path):
+        """The first to finish must not switch ASCII85 back on under the second."""
+        before = rl_config.useA85
+        first = PDFMaker(tmp_path / "1.pdf")
+        second = PDFMaker(tmp_path / "2.pdf")
+        first.save()
+        assert rl_config.useA85 == 0
+        second.save()
+        assert rl_config.useA85 == before
+
+    def test_a_dropped_document_gives_it_back_when_collected(self, tmp_path):
+        before = rl_config.useA85
+        doc = PDFMaker(tmp_path / "b.pdf")
+        del doc
+        gc.collect()
+        assert rl_config.useA85 == before
+
+    def test_saving_twice_releases_once(self, tmp_path):
+        """A second save must not take a second document's hold away."""
+        other = PDFMaker(tmp_path / "o.pdf")
+        doc = PDFMaker(tmp_path / "b.pdf")
+        doc.save()
+        doc._release_ascii85()
+        assert rl_config.useA85 == 0
+        other.save()
+
+    def test_ascii85_true_leaves_the_switch_alone(self, tmp_path):
+        before = rl_config.useA85
+        doc = PDFMaker(tmp_path / "a.pdf", ascii85=True)
+        assert rl_config.useA85 == before
+        doc.save()

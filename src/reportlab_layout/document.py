@@ -17,9 +17,12 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 
 import logging
 import os
+import threading
+import weakref
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any, Protocol, TypeAlias
+from typing import Any, ClassVar, Protocol, TypeAlias
 
+from reportlab import rl_config
 from reportlab.lib.styles import StyleSheet1
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as pdfcanvas
@@ -178,6 +181,42 @@ class _Stack(Flowable):
             placement.flowable.drawOn(self.canv, 0, bottom, _sW=self.width - placement.width)
 
 
+class _Ascii85Switch:
+    """Holds reportlab's ``useA85`` off while documents written in binary are open.
+
+    reportlab ASCII85-encodes every image and page stream unless
+    ``rl_config.useA85`` is false. That is a process-wide setting, read when
+    each image is drawn and again when each page is written -- there is no
+    per-document one. So a document that asks for binary streams has to hold
+    the setting off from its first drawing to the end of :meth:`PDFMaker.save`.
+
+    Several such documents can be open at once -- threads in a web application
+    -- so the switch counts them under a lock: the first turns the setting off,
+    the last restores whatever it was before. Turning it off early or late is
+    safe, merely wasteful: each image and each stream records its own filters
+    alongside its content, so the PDF stays valid either way, only bigger.
+    """
+
+    _lock: ClassVar[threading.Lock] = threading.Lock()
+    _holders: ClassVar[int] = 0
+    _saved: ClassVar[Any] = None
+
+    @classmethod
+    def acquire(cls) -> None:
+        with cls._lock:
+            if cls._holders == 0:
+                cls._saved = rl_config.useA85
+                rl_config.useA85 = 0
+            cls._holders += 1
+
+    @classmethod
+    def release(cls) -> None:
+        with cls._lock:
+            cls._holders -= 1
+            if cls._holders == 0:
+                rl_config.useA85 = cls._saved
+
+
 class PDFMaker:
     """A PDF document built page by page, with a flow cursor.
 
@@ -202,6 +241,14 @@ class PDFMaker:
         ``Canvas``, with the output and ``pagesize=``: a ``Canvas`` subclass
         such as :class:`~reportlab_layout.NumberedCanvas`, which stamps "page x
         of y".
+    :param ascii85: ``True`` lets reportlab encode images and page streams in
+        ASCII85, as it does by default. This package writes them in binary
+        instead: ASCII85 keeps a PDF to 7-bit text at the cost of a quarter more
+        bytes, which no mail or web transport has needed for decades -- a mail
+        attachment is base64-encoded anyway. reportlab only has a process-wide
+        switch for it, so while a binary document is open, any other PDF built
+        in the same process is written in binary too, ``ascii85=True`` or not:
+        valid, only smaller.
     """
 
     def __init__(
@@ -220,6 +267,7 @@ class PDFMaker:
         auto_page_break: bool = False,
         show_boundaries: bool = False,
         canvasmaker: Callable[..., pdfcanvas.Canvas] = pdfcanvas.Canvas,
+        ascii85: bool = False,
     ) -> None:
         self.geometry = PageGeometry.build(
             pagesize=pagesize,
@@ -249,6 +297,15 @@ class PDFMaker:
 
         self._export_geometry()
         self.canvas.setFontSize(self.font_size)
+
+        # Taken last, once nothing above can fail. weakref.finalize releases it
+        # exactly once: from save() or a failing with block, or when the
+        # document is collected if it is dropped without either.
+        if ascii85:
+            self._release_ascii85: Callable[[], object] = lambda: None
+        else:
+            _Ascii85Switch.acquire()
+            self._release_ascii85 = weakref.finalize(self, _Ascii85Switch.release)
 
     @property
     def canvas(self) -> pdfcanvas.Canvas:
@@ -298,6 +355,8 @@ class PDFMaker:
     def __exit__(self, exc_type: type | None, exc: BaseException | None, tb: object) -> None:
         if exc_type is None:
             self.save()
+        else:
+            self._release_ascii85()
 
     def set_metadata(self, author: str = "", title: str = "", subject: str = "") -> None:
         """Set the PDF metadata."""
@@ -321,8 +380,11 @@ class PDFMaker:
         to read or send it. Its position is left at the end of the PDF: rewind
         it with ``seek(0)`` before reading it back.
         """
-        self.draw_header_footer()
-        self.canvas.save()
+        try:
+            self.draw_header_footer()
+            self.canvas.save()
+        finally:
+            self._release_ascii85()
 
     # ------------------------------------------------------------------
     # Cursor

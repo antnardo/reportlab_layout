@@ -2,7 +2,7 @@
 
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -30,8 +30,13 @@ def out(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def doc(out: Path, stylesheet: StyleSheet1) -> PDFMaker:
-    return PDFMaker(out, stylesheet=stylesheet)
+def doc(out: Path, stylesheet: StyleSheet1) -> Iterator[PDFMaker]:
+    document = PDFMaker(out, stylesheet=stylesheet)
+    yield document
+    # A PDFMaker holds reportlab's process-wide ASCII85 switch while it is open,
+    # and pytest keeps a fixture's value alive until after teardown: a document
+    # the test never saved has to give the switch back here.
+    document._release_ascii85()
 
 
 @pytest.fixture
@@ -94,3 +99,23 @@ def fill_rgb(canvas) -> tuple[float, float, float]:
     """
     fill = canvas._fillColorObj
     return tuple(fill) if isinstance(fill, tuple) else fill.rgb()
+
+
+@pytest.fixture(autouse=True)
+def _ascii85_switch_released():
+    """No test may leave reportlab's process-wide ASCII85 switch held.
+
+    Every PDFMaker holds it off while open, since ascii85=False is the default.
+    A document still referenced after its test would make the next test's PDFs
+    binary whatever it asked for, and hide a release that never happens. No
+    garbage collection is needed: a PDFMaker holds no reference cycle, so one
+    that goes out of scope is freed, and its hold released, at once.
+    """
+    from reportlab import rl_config
+
+    from reportlab_layout.document import _Ascii85Switch
+
+    before = rl_config.useA85
+    yield
+    assert _Ascii85Switch._holders == 0, "a test left a PDFMaker open"
+    assert rl_config.useA85 == before, "a test left rl_config.useA85 changed"
