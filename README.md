@@ -86,6 +86,12 @@ doc.advance(30)                                              # the cursor follow
   cursor over as many pages as it takes, a table between two rows with its
   heading repeated; one that cannot split starts a fresh page and says so in the
   log. `canvasmaker=NumberedCanvas` numbers the pages "x of y" in one pass.
+- **Lighter files.** Images and page streams are written in binary, not in the
+  ASCII85 reportlab uses by default, which adds a quarter to every one of them:
+  a document of scanned pages comes out a fifth smaller. reportlab only offers
+  this as a process-wide switch, so a document holds it for as long as it is
+  open, and other PDFs built meanwhile come out binary too. `ascii85=True` turns
+  it back.
 - **Two dependencies**, reportlab and Pillow. No headless browser, no LaTeX, no
   system binary.
 

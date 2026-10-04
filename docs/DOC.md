@@ -61,6 +61,7 @@ doc = PDFMaker(
     auto_page_break=False,
     show_boundaries=False,
     canvasmaker=Canvas,     # what builds the canvas: NumberedCanvas numbers the pages
+    ascii85=False,          # binary streams, a quarter smaller; True for ASCII85: see below
 )
 ```
 
@@ -107,6 +108,37 @@ need it.
 
 For type annotations, the accepted types are spelled `OutputLike`, and
 `Writable` is the protocol a file object has to meet.
+
+### Smaller files: binary streams
+
+reportlab writes every image and every page stream in ASCII85 unless told
+otherwise, which keeps the PDF to 7-bit text at the cost of a quarter more bytes.
+That made sense for transports that mangled binary data; none in use today does,
+and a mail attachment is base64-encoded by the mail itself. So this package
+writes them in binary. Measured on a page scanned as a 279 KB JPEG, the PDF is
+282 KB where reportlab alone makes 352 KB: ASCII85 adds 24.8 %, and leaving it
+out saves a fifth of the file. The output is a valid PDF that every reader opens.
+
+```python
+doc = PDFMaker("output.pdf", ascii85=True)   # back to reportlab's encoding
+```
+
+reportlab has no per-document setting for this, only the process-wide
+`reportlab.rl_config.useA85`, read when each image is drawn and again when each
+page is written. So a document holds that switch off from the moment it is built
+to the end of `save()` -- or of the `with` block, even when it fails, or until it
+is dropped, which frees it at once. Several documents open at once, in the
+threads of a web application, keep it off until the last one is done, then give
+back whatever value it had.
+
+Two consequences. **While a document is open, any other PDF built in the same
+process is written in binary too**, by `PDFMaker` or by plain reportlab: valid,
+only smaller. And for the same reason, **`ascii85=True` is not a promise** when
+another document is open at the same moment: it leaves the switch alone rather
+than forcing it on, so it gets ASCII85 only if nothing else has turned it off.
+Each image and each stream records its own filters alongside its content, so a
+switch flipped part-way through a document makes it bigger or smaller, never
+broken.
 
 ### Geometry attributes
 
