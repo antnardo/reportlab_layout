@@ -752,15 +752,20 @@ stamps and notes a corrector puts on a scanned copy are the case in point.
 
 ```python
 with doc.annotation(x, y, width, height, contents="unit?", author="corrector"):
-    doc.draw_round_rect(x, y, width, height, radius=3, fill="white", stroke="red")
+    # A stroke straddles its path: kept half a line width inside the rectangle,
+    # it is not clipped
+    doc.draw_round_rect(x + 0.5, y + 0.5, width - 1, height - 1, radius=3,
+                        fill="white", stroke="red", line_width=1)
     doc.draw_string("unit?", x + 4, y + 6, color="red")
 ```
 
 The rectangle is in canvas coordinates, in points, and so is everything drawn
 inside the block, on the same page: the drawing lands exactly where it would
-have landed on the page, and what falls outside the rectangle is clipped. Any
-`draw_*` call works there, images and paragraphs included. `contents` is the
-text a reader lists in its comments panel, `author` the name it shows beside it.
+have landed on the page, and what falls outside the rectangle is clipped — the
+outer half of a border drawn on the rectangle's own edge too. Any `draw_*` call
+works there, images and paragraphs included. `contents` is the text a reader
+lists in its comments panel, `author` the name it shows beside it; both take
+any Unicode text.
 
 Every reader shows the annotation exactly as drawn. reportlab's own annotation
 classes carry only a text, and leave the look to the reader, which draws a
@@ -770,7 +775,14 @@ object moves. It is a `/Stamp`, the subtype that needs nothing but its rectangle
 and that no reader redraws from a font of its own.
 
 A block that raises adds nothing, and the page goes on as before. A block may
-not start a new page, and blocks do not nest: both raise `RuntimeError`.
+neither start a new page nor save the document, and blocks do not nest: all
+three raise `RuntimeError`. A flowing call inside the block that runs out of
+page — a `draw_paragraph` with `auto_page_break` — raises the same way.
+
+Text extractors do not agree on annotations: `pdftotext` reads the text drawn in
+one, pypdf's `extract_text` does not, nor does pdfium's text API until the page
+is flattened (`FPDFPage_Flatten`). Check what an annotation holds by rendering
+the page, or by reading its appearance stream.
 
 ## Styles
 
@@ -1191,7 +1203,6 @@ when you want several figures at once, since it computes them from one lookup.
 | `image_spec` | reads that size from a file | [Images](#images) |
 | `load_image` | an `Image` flowable sized in points, aspect ratio kept | [Images](#images) |
 | `inline_image` | the `<img/>` tag of an image standing on the baseline | [Images inside a line](#images-inside-a-line) |
-| `AppearanceAnnotation` | the `/Stamp` annotation behind `doc.annotation`, as reportlab writes it | [Annotations a reader can move](#annotations-a-reader-can-move) |
 | `FrameWriter` | fills a reportlab `Frame` and reports what overflowed | [Frames](#frames) |
 
 ### Paragraphs and columns

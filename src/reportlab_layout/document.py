@@ -388,6 +388,10 @@ class PDFMaker:
         to read or send it. Its position is left at the end of the PDF: rewind
         it with ``seek(0)`` before reading it back.
         """
+        if self._annotating:
+            # reportlab would write the annotation's drawing onto the page, lose
+            # what the page held, then fail when the block closes its form.
+            raise RuntimeError("a document cannot be saved inside an annotation")
         try:
             self.draw_header_footer()
             self.canvas.save()
@@ -1096,12 +1100,14 @@ class PDFMaker:
         allows. ``x``, ``y``, ``width``, ``height`` is its rectangle, canvas
         coordinates in points; draw inside the block with the usual ``draw_*``
         methods, in absolute coordinates on the same page -- what falls outside the
-        rectangle is clipped. ``contents`` is the text a reader lists in its
-        comments panel, ``author`` the name it shows beside it. See
+        rectangle is clipped, the outer half of a stroke laid on its edge
+        included. ``contents`` is the text a reader lists in its comments panel,
+        ``author`` the name it shows beside it. See
         :mod:`reportlab_layout.annotations`.
 
-        The block yields the rectangle as a :class:`Box`. It must not start a new
-        page. If it raises, nothing is added, and the page goes on as before.
+        The block yields the rectangle as a :class:`Box`. It must neither start a
+        new page nor save the document. If it raises, nothing is added, and the
+        page goes on as before.
         """
         if width <= 0 or height <= 0:
             raise ValueError(f"an annotation needs a positive width and height, got {width} x {height}")

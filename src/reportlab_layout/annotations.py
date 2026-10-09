@@ -32,7 +32,7 @@ __all__ = ["AppearanceAnnotation"]
 PRINT_FLAG = 4  # the annotation flag that keeps it when the page is printed
 
 
-class AppearanceAnnotation(pdfdoc.Annotation):  # type: ignore[misc]  # reportlab is untyped
+class AppearanceAnnotation(pdfdoc.Annotation):
     """A ``/Stamp`` annotation drawn by a form XObject, as reportlab writes it.
 
     ``rect`` is ``(x1, y1, x2, y2)`` in page coordinates; ``form`` is the internal

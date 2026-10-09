@@ -14,7 +14,6 @@ exact point.
         doc.draw_table([["Subject", "Mark"], ["Maths", "17"]])
 """
 
-from reportlab_layout.annotations import AppearanceAnnotation
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
 from reportlab_layout.columns import Packing, Placement, balanced_height, keep_with_next, pack_columns
@@ -49,7 +48,6 @@ __version__ = "1.8.0"
 
 __all__ = [
     "STYLES",
-    "AppearanceAnnotation",
     "Box",
     "ColorLike",
     "Cursor",

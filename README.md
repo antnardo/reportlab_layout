@@ -86,6 +86,11 @@ doc.advance(30)                                              # the cursor follow
   cursor over as many pages as it takes, a table between two rows with its
   heading repeated; one that cannot split starts a fresh page and says so in the
   log. `canvasmaker=NumberedCanvas` numbers the pages "x of y" in one pass.
+- **Marks a reader can move.** What is drawn inside `with doc.annotation(…)`
+  becomes a PDF annotation rather than part of the page: it prints with the
+  page, and whoever reads the file can drag it aside or delete it — the stamps
+  and comments a corrector puts on a scanned copy. The annotation carries its
+  own drawing, so readers show it exactly as drawn, images and fonts included.
 - **Lighter files.** Images and page streams are written in binary, not in the
   ASCII85 reportlab uses by default, which adds a quarter to every one of them:
   a document of scanned pages comes out a fifth smaller. reportlab only offers
