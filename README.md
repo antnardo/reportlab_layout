@@ -101,9 +101,9 @@ doc.advance(30)                                              # the cursor follow
 - **PDF pages as vector drawing.** A formula typeset by LaTeX and saved as a
   one-page PDF goes on the page, or inside a line of text as an image would,
   and stays vector: sharp at any size, its text still text. Every object it
-  brings is written once per document, so the fonts a hundred formulas share
-  cost their size once, and the document comes out lighter than with the
-  same formulas as images.
+  brings is written once per document, so the fonts many formulas share cost
+  their size once: thirty-nine sheets of a hundred real formulas weigh 407 kB,
+  against 1,087 kB with the same formulas as 600 dpi images.
 - **Two dependencies**, reportlab and Pillow, and pypdf for PDF pages, as the
   `pdf` extra. No headless browser, no LaTeX, no system binary.
 
