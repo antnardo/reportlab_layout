@@ -88,9 +88,10 @@ doc.advance(30)                                              # the cursor follow
   log. `canvasmaker=NumberedCanvas` numbers the pages "x of y" in one pass.
 - **Marks a reader can move.** What is drawn inside `with doc.annotation(…)`
   becomes a PDF annotation rather than part of the page: it prints with the
-  page, and whoever reads the file can drag it aside or delete it — the stamps
-  and comments a corrector puts on a scanned copy. The annotation carries its
-  own drawing, so readers show it exactly as drawn, images and fonts included.
+  page, and a reader with an annotation editor — Firefox's, for one — lets
+  whoever reads the file drag it aside or delete it: the stamps and comments a
+  corrector puts on a scanned copy. The annotation carries its own drawing, so
+  readers show it exactly as drawn, images, fonts and transparency included.
 - **Lighter files.** Images and page streams are written in binary, not in the
   ASCII85 reportlab uses by default, which adds a quarter to every one of them:
   a document of scanned pages comes out a fifth smaller. reportlab only offers
@@ -195,6 +196,8 @@ you still want to write text as it comes, without counting points by hand.
   images, frames, columns, pagination.
 - [`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py) — a one-page
   document, flow and absolute drawing mixed.
+- [`examples/annotations.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/annotations.py) — a marked
+  copy whose marks are annotations a reader can move.
 - [`scripts/centering_proof.py`](https://github.com/antnardo/reportlab_layout/blob/main/scripts/centering_proof.py) — the visual
   and numeric proof of the centring.
 

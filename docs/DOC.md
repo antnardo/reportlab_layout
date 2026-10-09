@@ -746,9 +746,13 @@ last line has no free end for the tag.
 
 What the canvas draws becomes part of the page: a reader can neither move it nor
 remove it. Drawn inside `doc.annotation(...)`, the same drawing becomes a PDF
-annotation instead — an object lying on top of the page, which every reader
-lets its user drag aside or delete, and which still prints with the page. The
-stamps and notes a corrector puts on a scanned copy are the case in point.
+annotation instead — an object lying on top of the page, which still prints
+with the page, and which a reader with an annotation editor lets its user drag
+aside or delete. The stamps and notes a corrector puts on a scanned copy are the
+case in point:
+[`examples/annotations.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/annotations.py)
+marks a copy that way, with a score, ticks, a comment, a see-through highlight
+and a sketch.
 
 ```python
 with doc.annotation(x, y, width, height, contents="unit?", author="corrector"):
@@ -765,14 +769,32 @@ have landed on the page, and what falls outside the rectangle is clipped — the
 outer half of a border drawn on the rectangle's own edge too. Any `draw_*` call
 works there, images and paragraphs included. `contents` is the text a reader
 lists in its comments panel, `author` the name it shows beside it; both take
-any Unicode text.
+any Unicode text. See-through colours, shadings and spot colours work as on the
+page: reportlab leaves them out of what a form declares it uses, so the block
+declares them itself — in 1.9.0 a see-through colour came out opaque.
 
-Every reader shows the annotation exactly as drawn. reportlab's own annotation
+A reader shows the annotation exactly as drawn. reportlab's own annotation
 classes carry only a text, and leave the look to the reader, which draws a
 FreeText in its own font and a Stamp as a generic icon; here the drawing travels
 with the annotation as its appearance (a form XObject in `/AP`), and only the
 object moves. It is a `/Stamp`, the subtype that needs nothing but its rectangle
 and that no reader redraws from a font of its own.
+
+What the engines behind the common readers make of it, checked on the output of
+`examples/annotations.py` in October 2026:
+
+| Engine | Readers built on it | Shows it as drawn | Moved and deleted, then saved |
+| --- | --- | --- | --- |
+| Acrobat | Acrobat, Acrobat Reader | yes, each one listed with its text and author | moved and deleted with the mouse |
+| pdf.js 6.3 | Firefox | yes | its editor takes each annotation as an image it can move and delete |
+| PDFKit | Preview, Safari, iOS | yes | through PDFKit: the drawing kept |
+| pdfium | Chrome, Edge, Android | yes | through pdfium: the drawing kept |
+| poppler | Evince, Okular, `pdftoppm` | yes | not tried |
+| MuPDF | SumatraPDF, `mutool` | yes | not tried |
+| Ghostscript | print pipelines | yes, printing included | — |
+
+Whether a reader lets its *user* move an annotation is up to its interface, not
+its engine: of the editors, Acrobat's and Firefox's were tried.
 
 A block that raises adds nothing, and the page goes on as before. A block may
 neither start a new page nor save the document, and blocks do not nest: all
