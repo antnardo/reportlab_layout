@@ -3,6 +3,20 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`PDFMaker.annotation(x, y, width, height, contents=..., author=...)`**, a
+  block whose drawing becomes a PDF annotation: every reader shows it exactly
+  as drawn, prints it with the page, and lets its user drag it aside or delete
+  it. The drawing travels as the annotation's appearance stream, a form
+  XObject, so no reader redraws it from a font of its own. reportlab drops the
+  annotations of a page still blank when a form ends, and never writes a page
+  left with nothing but annotations; an empty `q`/`Q` pair is drawn first so
+  that neither happens. A page break inside the block, or a nested block,
+  raises `RuntimeError`.
+
 ## [1.8.0] — 2026-10-04
 
 ### Changed

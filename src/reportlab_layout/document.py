@@ -15,21 +15,25 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 ``unit`` (millimetres by default), ``y`` being a depth from the top of the page.
 """
 
+import itertools
 import logging
 import os
 import threading
 import weakref
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any, ClassVar, Protocol, TypeAlias
 
 from reportlab import rl_config
 from reportlab.lib.styles import StyleSheet1
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfdoc
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.platypus import Flowable, Frame, Image, KeepTogether, Paragraph, Spacer, Table, TableStyle
 from reportlab.platypus import paragraph as platypus_paragraph
 from reportlab.platypus.doctemplate import ActionFlowable
 
+from reportlab_layout.annotations import AppearanceAnnotation
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
 from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, pack_columns
@@ -294,6 +298,8 @@ class PDFMaker:
         self.active_frame: Frame | None = None
         self.page = 1
         self._warned: set[str] = set()
+        self._annotations = itertools.count(1)  # names the forms that draw annotations
+        self._annotating = False  # inside an annotation block, where a page cannot end
 
         self._export_geometry()
         self.canvas.setFontSize(self.font_size)
@@ -366,6 +372,8 @@ class PDFMaker:
 
     def new_page(self) -> int:
         """Finish the current page -- header and footer included -- and open a fresh one."""
+        if self._annotating:
+            raise RuntimeError("an annotation cannot span a page break")
         self.draw_header_footer()
         self.canvas.showPage()
         self.page += 1
@@ -1066,3 +1074,54 @@ class PDFMaker:
     def draw_regular_polygon(self, x: float, y: float, radius: float, **kwargs: Any) -> Box:
         """Draw a regular polygon or star centred on ``(x, y)``."""
         return self.shapes.regular_polygon(x, y, radius, **kwargs)
+
+    # ------------------------------------------------------------------
+    # Annotations
+    # ------------------------------------------------------------------
+    @contextmanager
+    def annotation(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        *,
+        contents: str = "",
+        author: str = "",
+    ) -> Iterator[Box]:
+        """Make what is drawn inside the block a PDF annotation, movable and removable.
+
+        Every reader shows the annotation exactly as drawn, prints it with the page,
+        and lets its user drag it aside or delete it, which nothing drawn on the page
+        allows. ``x``, ``y``, ``width``, ``height`` is its rectangle, canvas
+        coordinates in points; draw inside the block with the usual ``draw_*``
+        methods, in absolute coordinates on the same page -- what falls outside the
+        rectangle is clipped. ``contents`` is the text a reader lists in its
+        comments panel, ``author`` the name it shows beside it. See
+        :mod:`reportlab_layout.annotations`.
+
+        The block yields the rectangle as a :class:`Box`. It must not start a new
+        page. If it raises, nothing is added, and the page goes on as before.
+        """
+        if width <= 0 or height <= 0:
+            raise ValueError(f"an annotation needs a positive width and height, got {width} x {height}")
+        if self._annotating:
+            raise RuntimeError("annotations do not nest")
+        name = f"annotation{next(self._annotations)}"
+        # reportlab sets the page's drawing and annotations aside while a form is
+        # drawn only when the page already holds some drawing; on a blank page they
+        # are dropped instead when the form ends -- the annotations added before
+        # with them -- and a page left with no drawing is never written. An empty
+        # q/Q pair is drawing enough, and draws nothing.
+        self.canvas.saveState()
+        self.canvas.restoreState()
+        self.canvas.beginForm(name, lowerx=x, lowery=y, upperx=x + width, uppery=y + height)
+        self._annotating = True
+        try:
+            yield Box(x, y, width, height)
+        finally:
+            # Always closed: an open form would swallow the rest of the page.
+            self._annotating = False
+            self.canvas.endForm()
+        rect = (x, y, x + width, y + height)
+        self.canvas._addAnnotation(AppearanceAnnotation(rect, contents, pdfdoc.xObjectName(name), author))

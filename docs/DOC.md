@@ -14,6 +14,7 @@
 - [Images](#images)
 - [Images inside a line](#images-inside-a-line)
 - [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
+- [Annotations a reader can move](#annotations-a-reader-can-move)
 - [Styles](#styles)
 - [Header and footer](#header-and-footer)
 - [Pagination](#pagination)
@@ -741,6 +742,36 @@ indent, as a LaTeX `\item[label]` does.
 The text is meant to be aligned left or justified: a centred or right-aligned
 last line has no free end for the tag.
 
+## Annotations a reader can move
+
+What the canvas draws becomes part of the page: a reader can neither move it nor
+remove it. Drawn inside `doc.annotation(...)`, the same drawing becomes a PDF
+annotation instead — an object lying on top of the page, which every reader
+lets its user drag aside or delete, and which still prints with the page. The
+stamps and notes a corrector puts on a scanned copy are the case in point.
+
+```python
+with doc.annotation(x, y, width, height, contents="unit?", author="corrector"):
+    doc.draw_round_rect(x, y, width, height, radius=3, fill="white", stroke="red")
+    doc.draw_string("unit?", x + 4, y + 6, color="red")
+```
+
+The rectangle is in canvas coordinates, in points, and so is everything drawn
+inside the block, on the same page: the drawing lands exactly where it would
+have landed on the page, and what falls outside the rectangle is clipped. Any
+`draw_*` call works there, images and paragraphs included. `contents` is the
+text a reader lists in its comments panel, `author` the name it shows beside it.
+
+Every reader shows the annotation exactly as drawn. reportlab's own annotation
+classes carry only a text, and leave the look to the reader, which draws a
+FreeText in its own font and a Stamp as a generic icon; here the drawing travels
+with the annotation as its appearance (a form XObject in `/AP`), and only the
+object moves. It is a `/Stamp`, the subtype that needs nothing but its rectangle
+and that no reader redraws from a font of its own.
+
+A block that raises adds nothing, and the page goes on as before. A block may
+not start a new page, and blocks do not nest: both raise `RuntimeError`.
+
 ## Styles
 
 ```python
@@ -1160,6 +1191,7 @@ when you want several figures at once, since it computes them from one lookup.
 | `image_spec` | reads that size from a file | [Images](#images) |
 | `load_image` | an `Image` flowable sized in points, aspect ratio kept | [Images](#images) |
 | `inline_image` | the `<img/>` tag of an image standing on the baseline | [Images inside a line](#images-inside-a-line) |
+| `AppearanceAnnotation` | the `/Stamp` annotation behind `doc.annotation`, as reportlab writes it | [Annotations a reader can move](#annotations-a-reader-can-move) |
 | `FrameWriter` | fills a reportlab `Frame` and reports what overflowed | [Frames](#frames) |
 
 ### Paragraphs and columns
@@ -1187,6 +1219,8 @@ Its own sections describe these; the list is here so that nothing is hidden.
 - **Straight onto the canvas** — `draw_string`, `apply_style`, `metrics`,
   `draw_line`, `draw_rect`, `draw_round_rect`, `draw_ellipse`, `draw_circle`,
   `draw_polygon`, `draw_regular_polygon`.
+- **Annotations** — `annotation`, a block whose drawing a reader can move and
+  delete.
 - **Header and footer** — `set_header`, `set_footer`, `draw_header_footer`.
 - **Frames** — `new_frame`, `draw_frame`, `frame_paragraph`, `frame_space`,
   `frame_image`.
