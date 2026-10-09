@@ -23,8 +23,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 - The documentation no longer says that every reader lets its user move an
   annotation: that takes a reader with an annotation editor. DOC.md lists what
   the readers make of one — Acrobat, pdf.js, PDFKit, pdfium, poppler, MuPDF
-  and Ghostscript all show it as drawn; Acrobat and Firefox let their user move
-  and delete it.
+  and Ghostscript all show it as drawn; Acrobat, Preview and Firefox let their
+  user move and delete it.
 
 ## [1.9.0] — 2026-10-09
 

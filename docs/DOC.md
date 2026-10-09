@@ -787,14 +787,14 @@ What the engines behind the common readers make of it, checked on the output of
 | --- | --- | --- | --- |
 | Acrobat | Acrobat, Acrobat Reader | yes, each one listed with its text and author | moved and deleted with the mouse |
 | pdf.js 6.3 | Firefox | yes | its editor takes each annotation as an image it can move and delete |
-| PDFKit | Preview, Safari, iOS | yes | through PDFKit: the drawing kept |
+| PDFKit | Preview, Safari, iOS | yes | moved and deleted with the mouse in Preview |
 | pdfium | Chrome, Edge, Android | yes | through pdfium: the drawing kept |
 | poppler | Evince, Okular, `pdftoppm` | yes | not tried |
 | MuPDF | SumatraPDF, `mutool` | yes | not tried |
 | Ghostscript | print pipelines | yes, printing included | — |
 
 Whether a reader lets its *user* move an annotation is up to its interface, not
-its engine: of the editors, Acrobat's and Firefox's were tried.
+its engine: of the editors, Acrobat's, Preview's and Firefox's were tried.
 
 A block that raises adds nothing, and the page goes on as before. A block may
 neither start a new page nor save the document, and blocks do not nest: all
