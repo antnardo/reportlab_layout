@@ -3,6 +3,16 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **A see-through colour drawn inside `PDFMaker.annotation` came out opaque**,
+  and hid what lay beneath — in poppler, Ghostscript, MuPDF, pdfium and PDFKit
+  alike. reportlab declares only the fonts, images and nested forms a form
+  uses, and leaves out its graphics states, shadings and spot colour spaces;
+  the block now declares them all.
+
 ## [1.9.0] — 2026-10-09
 
 ### Added

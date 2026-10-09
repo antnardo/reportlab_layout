@@ -21,15 +21,39 @@ panel, and ``T`` its author. The ``Print`` flag keeps it on paper.
 The form's bounding box is the annotation's rectangle, in page coordinates, with no
 matrix: the reader maps one onto the other unchanged, so what is drawn at a point of
 the page inside the block lands exactly there.
+
+reportlab writes a form's resources itself, and keeps only its fonts, images and
+nested forms: the graphics states it records on the form -- every see-through
+colour is one -- and its shadings and colour spaces are left out, and a reader
+then draws the form opaque, or not at all. :func:`form_resources` writes them
+all, the way reportlab does for a page.
 """
 
 from typing import Any
 
 from reportlab.pdfbase import pdfdoc
 
-__all__ = ["AppearanceAnnotation"]
+__all__ = ["AppearanceAnnotation", "form_resources"]
 
 PRINT_FLAG = 4  # the annotation flag that keeps it when the page is printed
+
+
+def form_resources(form: Any, shading: dict[Any, str]) -> Any:
+    """The full resource dictionary of a form XObject reportlab has just written.
+
+    ``form`` is reportlab's ``PDFFormXObject``, as ``endForm`` left it; ``shading``
+    the canvas's shadings as the form ended, which ``endForm`` does not record.
+    """
+    resources = pdfdoc.PDFResourceDictionary()
+    resources.basicFonts()
+    resources.allProcs()
+    if form.XObjects:
+        resources.XObject = form.XObjects
+    if getattr(form, "ExtGState", None):
+        resources.ExtGState = form.ExtGState
+    resources.setShading(shading)
+    resources.setColorSpace(getattr(form, "_colorsUsed", {}))
+    return resources
 
 
 class AppearanceAnnotation(pdfdoc.Annotation):

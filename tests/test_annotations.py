@@ -1,7 +1,13 @@
 """Annotations drawn like the page: movable, removable, and shown exactly as drawn."""
 
+import re
+import shutil
+import subprocess
+
 import pytest
+from PIL import Image as PILImage
 from pypdf import PdfReader
+from reportlab.lib.colors import CMYKColorSep, blue, red
 
 from reportlab_layout import PDFMaker
 
@@ -152,3 +158,46 @@ class TestAnnotation:
         doc.save()
         assert annotations(out) == []
         assert b"before" in page_content(out)
+
+    @pytest.mark.parametrize(
+        ("paint", "resource", "operator"),
+        [
+            (
+                lambda doc: doc.draw_rect(100, 600, 80, 30, fill=(1, 0, 0, 0.5), stroke=None),
+                "/ExtGState",
+                b"gs",
+            ),
+            (lambda doc: doc.canvas.linearGradient(100, 600, 180, 630, (red, blue)), "/Shading", b"sh"),
+            (
+                lambda doc: doc.draw_rect(
+                    100, 600, 80, 30, fill=CMYKColorSep(0, 0.5, 1, 0, spotName="ORANGE")
+                ),
+                "/ColorSpace",
+                b"cs",
+            ),
+        ],
+        ids=["see-through colour", "shading", "spot colour"],
+    )
+    def test_every_resource_the_drawing_names_is_declared(self, out, paint, resource, operator):
+        """reportlab writes a form's fonts and images, and leaves these out."""
+        with PDFMaker(out) as doc, doc.annotation(100, 600, 80, 30):
+            paint(doc)
+        appearance = annotations(out)[0]["/AP"]["/N"].get_object()
+        named = re.findall(rb"/(\S+) " + operator + rb"\b", appearance.get_data())
+        assert named
+        declared = appearance["/Resources"][resource]
+        assert all(f"/{name.decode()}" in declared for name in named)
+
+    def test_a_see_through_colour_stays_see_through(self, out, tmp_path):
+        """Without its graphics state, every reader drew it opaque, hiding the page beneath."""
+        if shutil.which("pdftoppm") is None:
+            pytest.skip("pdftoppm (poppler) is not installed")
+        with PDFMaker(out) as doc:
+            doc.draw_rect(100, 600, 80, 30, fill="black", stroke=None)
+            with doc.annotation(100, 600, 80, 30):
+                doc.draw_rect(100, 600, 80, 30, fill=(1, 1, 1, 0.5), stroke=None)
+        stem = tmp_path / "blend"
+        subprocess.run(["pdftoppm", "-r", "72", "-png", "-singlefile", str(out), str(stem)], check=True)
+        with PILImage.open(stem.with_suffix(".png")) as image:
+            grey = image.convert("L").getpixel((140, 842 - 615))
+        assert grey == pytest.approx(128, abs=8)

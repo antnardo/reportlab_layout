@@ -33,7 +33,7 @@ from reportlab.platypus import Flowable, Frame, Image, KeepTogether, Paragraph, 
 from reportlab.platypus import paragraph as platypus_paragraph
 from reportlab.platypus.doctemplate import ActionFlowable
 
-from reportlab_layout.annotations import AppearanceAnnotation
+from reportlab_layout.annotations import AppearanceAnnotation, form_resources
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
 from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, pack_columns
@@ -1128,6 +1128,9 @@ class PDFMaker:
         finally:
             # Always closed: an open form would swallow the rest of the page.
             self._annotating = False
+            shading = dict(self.canvas._shadingUsed)
             self.canvas.endForm()
+        form = self.canvas._doc.idToObject[pdfdoc.xObjectName(name)]
+        form.Resources = form_resources(form, shading)
         rect = (x, y, x + width, y + height)
         self.canvas._addAnnotation(AppearanceAnnotation(rect, contents, pdfdoc.xObjectName(name), author))
