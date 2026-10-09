@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.9.0] — 2026-10-09
 
 ### Added
 
@@ -11,11 +11,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   block whose drawing becomes a PDF annotation: every reader shows it exactly
   as drawn, prints it with the page, and lets its user drag it aside or delete
   it. The drawing travels as the annotation's appearance stream, a form
-  XObject, so no reader redraws it from a font of its own. reportlab drops the
-  annotations of a page still blank when a form ends, and never writes a page
-  left with nothing but annotations; an empty `q`/`Q` pair is drawn first so
-  that neither happens. A page break inside the block, or a nested block,
-  raises `RuntimeError`.
+  XObject, so no reader redraws it from a font of its own; it is clipped to the
+  annotation's rectangle. `contents` is the text a reader lists in its comments
+  panel, `author` the name beside it. reportlab drops the annotations of a page
+  still blank when a form ends, and never writes a page left with nothing but
+  annotations; an empty `q`/`Q` pair is drawn first so that neither happens. A
+  page break or a `save()` inside the block, or a nested block, raises
+  `RuntimeError`: reportlab would otherwise lose what the page held.
 
 ## [1.8.0] — 2026-10-04
 
