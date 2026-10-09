@@ -98,8 +98,14 @@ doc.advance(30)                                              # the cursor follow
   this as a process-wide switch, so a document holds it for as long as it is
   open, and other PDFs built meanwhile come out binary too. `ascii85=True` turns
   it back.
-- **Two dependencies**, reportlab and Pillow. No headless browser, no LaTeX, no
-  system binary.
+- **PDF pages as vector drawing.** A formula typeset by LaTeX and saved as a
+  one-page PDF goes on the page, or inside a line of text as an image would,
+  and stays vector: sharp at any size, its text still text. Every object it
+  brings is written once per document, so the fonts a hundred formulas share
+  cost their size once, and the document comes out lighter than with the
+  same formulas as images.
+- **Two dependencies**, reportlab and Pillow, and pypdf for PDF pages, as the
+  `pdf` extra. No headless browser, no LaTeX, no system binary.
 
 ## How it compares
 

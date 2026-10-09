@@ -34,6 +34,10 @@ dependencies = [
     "reportlab>=4.0",
 ]
 
+[project.optional-dependencies]
+# Reading the pages of other PDFs, to lay them down as vector drawing.
+pdf = ["pypdf>=4.0"]
+
 [project.urls]
 Homepage = "https://github.com/antnardo/reportlab_layout"
 Documentation = "https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md"

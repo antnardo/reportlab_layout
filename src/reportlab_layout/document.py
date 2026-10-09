@@ -42,6 +42,7 @@ from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import PageGeometry
 from reportlab_layout.images import ImageLike, load_image
 from reportlab_layout.metrics import TextMetrics
+from reportlab_layout.pdfpages import PdfSource, draw_pdf_page
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, resolve_style
 from reportlab_layout.text import TextPainter
@@ -774,6 +775,23 @@ class PDFMaker:
     ) -> Box:
         """Lay down an image. ``width``, ``height`` and ``scale`` are in points."""
         return self.draw(self.make_image(spec, width=width, height=height, scale=scale), **kwargs)
+
+    def draw_pdf_page(
+        self,
+        page: PdfSource,
+        x: float,
+        y: float,
+        width: float | None = None,
+        height: float | None = None,
+        scale: float | None = None,
+    ) -> Box:
+        """Draw a page of a PDF as vector drawing, its lower-left corner at ``(x, y)``.
+
+        Canvas coordinates in points, like the shapes; ``page`` is a
+        :class:`~reportlab_layout.PdfPage` or a PDF (path, bytes, file) whose first
+        page is taken. See :func:`~reportlab_layout.draw_pdf_page`.
+        """
+        return draw_pdf_page(self.canvas, page, x, y, width, height, scale)
 
     def draw_centered_line(self, y: float | None = None, wscale: float = 1.0, **kwargs: Any) -> Box:
         """Draw a horizontal rule centred on the content width.

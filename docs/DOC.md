@@ -13,6 +13,7 @@
 - [Shapes](#shapes)
 - [Images](#images)
 - [Images inside a line](#images-inside-a-line)
+- [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing)
 - [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
 - [Annotations a reader can move](#annotations-a-reader-can-move)
 - [Styles](#styles)
@@ -716,6 +717,67 @@ reportlab draws it.
 `InlineParagraph.baselines()` gives the baseline of every line as drawn, above
 the bottom of the block, once the paragraph is wrapped.
 
+## PDF pages, as vector drawing
+
+A formula typeset by TeX, or a pictogram from one of its fonts, comes out of
+LaTeX as a page of PDF. Turned into an image, it becomes a grid of pixels that a
+printer resamples and a zoom shows, even at 600 dpi. Laid down as it is, it
+stays vector: sharp at any size, its text still text that a reader can search
+and copy. reportlab cannot read a PDF, so this takes pypdf, an optional
+dependency:
+
+```bash
+pip install "reportlab_layout[pdf]"
+```
+
+```python
+from reportlab_layout import InlineParagraph, inline_pdf, pdf_page
+
+page = pdf_page("formula.pdf")             # the first page; index=2 for the third
+doc.draw_pdf_page(page, x, y, width=40)    # at a point, canvas coordinates
+formula = inline_pdf(page, depth=3.1)      # or inside a line, as inline_image does
+doc.draw(InlineParagraph(f"Hence {formula}, as expected.", doc.stylesheet["Body"]))
+```
+
+`pdf_page` reads a page from a path, the bytes of a PDF or a binary file. Its
+box is the page's crop box — the media box, unless one is set — and what lies
+outside is clipped. The size goes as for an image: the page's own by default,
+or one of `width`, `height` and `scale` with the aspect ratio kept, or `width`
+and `height` together. Every function also takes the PDF itself in place of a
+`PdfPage`, and reads its first page.
+
+`draw_pdf_page(canvas, page, x, y, …)` lays the page down on any reportlab
+canvas: a flowable that draws itself has only `self.canv`, and that is enough.
+`doc.draw_pdf_page` does the same on the document's canvas, and a page drawn
+inside an [annotation](#annotations-a-reader-can-move) travels with it.
+
+`inline_pdf` writes the `<img/>` tag of a page set on the baseline, with
+`inline_image`'s arguments: `depth` is how far the page reaches below the
+baseline, and the style needs `autoLeading="max"`. reportlab reserves the room
+and breaks the lines exactly as for an image; `InlineParagraph`, and so
+`TaggedParagraph`, then draws the page where the image would have gone. A plain
+`Paragraph` cannot: it paints the stand-in image instead, a magenta box, so that
+the slip shows. That stand-in is a one-pixel file in a temporary folder, removed
+when the process ends, so a tag is good for the process that wrote it. When no
+PDF is at hand, `inline_image` takes the same `width`, `height` and `depth`.
+
+**Each object is written once per document.** A page is copied as a form
+XObject, and everything it uses — fonts, images, graphics states — object by
+object, the streams byte for byte. Every object is known by a digest of its
+content, and one the document already holds is not written again, whichever
+file it came from: a page drawn a hundred times is one form, and the fonts that
+many formulas share are written once. This is what makes vector the lighter
+choice. Measured on a hundred formulas typeset together by LuaLaTeX, cut into
+one page each (October 2026): the hundred files weigh 1.8 MB, seven tenths of
+it fonts, yet hold only six distinct font streams, 45 kB in all. Thirty-nine
+sheets holding all hundred inline come to 407 kB, against 1,087 kB with the
+same formulas as 600 dpi PNGs, and build in a quarter of the time.
+
+Refused, with `ValueError`: a rotated page, an encrypted PDF, a page whose
+resources refer back to themselves, and an encrypted output document, whose
+copied streams reportlab would leave unencrypted. Only the page's drawing comes
+across, not its links or annotations.
+
 ## A tag at the end of a paragraph
 
 `TaggedParagraph` sets a tag flush right on the last line, as LaTeX does with
@@ -1225,13 +1287,18 @@ when you want several figures at once, since it computes them from one lookup.
 | `image_spec` | reads that size from a file | [Images](#images) |
 | `load_image` | an `Image` flowable sized in points, aspect ratio kept | [Images](#images) |
 | `inline_image` | the `<img/>` tag of an image standing on the baseline | [Images inside a line](#images-inside-a-line) |
+| `PdfPage` | one page of a PDF, read: its bytes, its box, the key that names it | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
+| `PdfSource` | a `PdfPage`, or a PDF to take a page from: path, bytes, binary file | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
+| `pdf_page` | reads a page of a PDF | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
+| `draw_pdf_page` | lays a PDF page down on any canvas, as vector drawing | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
+| `inline_pdf` | the tag of a PDF page standing on the baseline, for an `InlineParagraph` | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
 | `FrameWriter` | fills a reportlab `Frame` and reports what overflowed | [Frames](#frames) |
 
 ### Paragraphs and columns
 
 | Name | What it is | Where |
 | --- | --- | --- |
-| `InlineParagraph` | a paragraph whose lines make room for the images they hold | [Images inside a line](#images-inside-a-line) |
+| `InlineParagraph` | a paragraph whose lines make room for the images they hold, and that draws inline PDF pages | [Images inside a line](#images-inside-a-line) |
 | `TaggedParagraph` | a paragraph with a tag flush right on its last line | [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph) |
 | `pack_columns` | lays a story into columns without drawing anything | [Packing columns yourself](#packing-columns-yourself) |
 | `balanced_height` | the lowest height at which a story still fits the columns | [Packing columns yourself](#packing-columns-yourself) |
@@ -1251,7 +1318,7 @@ Its own sections describe these; the list is here so that nothing is hidden.
   `draw_image`, `draw_centered_line`, `draw_columns`.
 - **Straight onto the canvas** — `draw_string`, `apply_style`, `metrics`,
   `draw_line`, `draw_rect`, `draw_round_rect`, `draw_ellipse`, `draw_circle`,
-  `draw_polygon`, `draw_regular_polygon`.
+  `draw_polygon`, `draw_regular_polygon`, `draw_pdf_page`.
 - **Annotations** — `annotation`, a block whose drawing a reader can move and
   delete.
 - **Header and footer** — `set_header`, `set_footer`, `draw_header_footer`.

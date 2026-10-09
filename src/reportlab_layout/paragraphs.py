@@ -42,6 +42,8 @@ from reportlab.platypus import Paragraph
 from reportlab.platypus import paragraph as platypus_paragraph
 from reportlab.platypus.paragraph import imgNormV, imgVRange
 
+from reportlab_layout.pdfpages import pdf_placeholders
+
 __all__ = ["InlineParagraph", "TaggedParagraph"]
 
 
@@ -108,8 +110,14 @@ class InlineParagraph(Paragraph):
     Use it with ``autoLeading="max"`` whenever the text holds inline images
     (see :func:`~reportlab_layout.inline_image`) or changes size: a tall first
     line then lowers the paragraph instead of overprinting the block above, and
-    a line that starts with an image is as tall as the image.
+    a line that starts with an image is as tall as the image. It also draws the
+    PDF pages of :func:`~reportlab_layout.inline_pdf`, which a plain
+    ``Paragraph`` cannot.
     """
+
+    def drawOn(self, canvas: Any, x: float, y: float, _sW: float = 0) -> None:  # noqa: N802, N803 - reportlab's names
+        with pdf_placeholders(canvas):
+            super().drawOn(canvas, x, y, _sW)
 
     def breakLines(self, width: Any) -> Any:  # noqa: N802 - reportlab's name
         lines = super().breakLines(width)

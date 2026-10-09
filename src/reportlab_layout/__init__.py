@@ -40,6 +40,7 @@ from reportlab_layout.metrics import (
 )
 from reportlab_layout.numbering import NumberedCanvas
 from reportlab_layout.paragraphs import InlineParagraph, TaggedParagraph
+from reportlab_layout.pdfpages import PdfPage, PdfSource, draw_pdf_page, inline_pdf, pdf_page
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, add_style, make_stylesheet, resolve_style
 from reportlab_layout.text import TextPainter
@@ -61,6 +62,8 @@ __all__ = [
     "PDFMaker",
     "Packing",
     "PageGeometry",
+    "PdfPage",
+    "PdfSource",
     "Placement",
     "ShapePainter",
     "StyleLike",
@@ -73,15 +76,18 @@ __all__ = [
     "balanced_height",
     "baseline_offset",
     "cap_height",
+    "draw_pdf_page",
     "font_ascent",
     "font_descent",
     "font_height",
     "image_spec",
     "inline_image",
+    "inline_pdf",
     "keep_with_next",
     "load_image",
     "make_stylesheet",
     "pack_columns",
+    "pdf_page",
     "register_font_family",
     "resolve_pagesize",
     "resolve_style",

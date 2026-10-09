@@ -5,15 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
-### Fixed
-
-- **A see-through colour drawn inside `PDFMaker.annotation` came out opaque**,
-  and hid what lay beneath — in poppler, Ghostscript, MuPDF, pdfium and PDFKit
-  alike. reportlab declares only the fonts, images and nested forms a form
-  uses, and leaves out its graphics states, shadings and spot colour spaces;
-  the block now declares them all.
-
 ### Added
+
+- **PDF pages as vector drawing**, with pypdf as the optional `pdf` extra:
+  `pdf_page` reads a page, `draw_pdf_page` lays it down on any canvas (and
+  `PDFMaker.draw_pdf_page` on the document's), `inline_pdf` writes the tag that
+  sets it on the baseline inside an `InlineParagraph`, with `inline_image`'s
+  semantics. The page becomes a form XObject; its fonts and other resources
+  are copied object by object, and an object whose content the document
+  already holds is not written again — the fonts many formulas share are
+  written once. Thirty-nine sheets of a hundred real formulas weigh 407 kB,
+  against 1,087 kB with the formulas as 600 dpi PNGs.
 
 - `examples/annotations.py`: a marked copy whose score, ticks, comment,
   highlight and sketch are annotations.
@@ -25,6 +27,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   the readers make of one — Acrobat, pdf.js, PDFKit, pdfium, poppler, MuPDF
   and Ghostscript all show it as drawn; Acrobat, Preview and Firefox let their
   user move and delete it.
+
+### Fixed
+
+- **A see-through colour drawn inside `PDFMaker.annotation` came out opaque**,
+  and hid what lay beneath — in poppler, Ghostscript, MuPDF, pdfium and PDFKit
+  alike. reportlab declares only the fonts, images and nested forms a form
+  uses, and leaves out its graphics states, shadings and spot colour spaces;
+  the block now declares them all.
 
 ## [1.9.0] — 2026-10-09
 

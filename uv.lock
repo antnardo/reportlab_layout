@@ -720,6 +720,11 @@ dependencies = [
     { name = "reportlab" },
 ]
 
+[package.optional-dependencies]
+pdf = [
+    { name = "pypdf" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -732,8 +737,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
+    { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=4.0" },
     { name = "reportlab", specifier = ">=4.0" },
 ]
+provides-extras = ["pdf"]
 
 [package.metadata.requires-dev]
 dev = [
