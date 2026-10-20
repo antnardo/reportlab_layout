@@ -108,9 +108,10 @@ doc.advance(30)                                              # the cursor follow
   headings, lists, tables, quotations, code, images — from the cursor over as
   many pages as it takes, read as markdown-it reads it for a web page. Its
   formulas, `$…$` on the baseline and `$$…$$` displayed, are typeset by a
-  composer you hand it, all at once: `TexFormulas`, built on texformules, typesets them with a real
-  LaTeX and your preamble, in one compilation. A formula it refuses is written
-  as it stands, and reported; the document goes on. See
+  composer you hand it, all at once: `TexFormulas`, built on texformules,
+  typesets them with a real LaTeX and your preamble, in one compilation. A
+  formula it refuses is written as it stands, and reported; the document goes
+  on. See
   [Markdown with formulas](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md#markdown-with-formulas).
 - **Two dependencies**, reportlab and Pillow. The rest is optional: pypdf for
   PDF pages (`pdf`), markdown-it-py and mdit-py-plugins for Markdown
@@ -209,7 +210,7 @@ you still want to write text as it comes, without counting points by hand.
 
 - [`docs/DOC.md`](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md) — the full API
   reference: coordinate systems, placement, styles, metrics, fonts, inline
-  images, frames, columns, pagination.
+  images, PDF pages, Markdown with formulas, frames, columns, pagination.
 - [`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py) — a one-page
   document, flow and absolute drawing mixed.
 - [`examples/markdown.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/markdown.py) — a
