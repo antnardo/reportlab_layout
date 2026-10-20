@@ -3,6 +3,34 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`PDFMaker.draw_markdown(text, formulas=…)`**, with markdown-it-py and
+  mdit-py-plugins as the optional `markdown` extra: a Markdown text set from
+  the cursor over as many pages as it takes — headings kept with what follows,
+  paragraphs, bold, italic, strikethrough, links, inline code and code blocks,
+  nested lists, quotations, tables with their heading repeated, images, rules —
+  read in CommonMark with tables and `dollarmath`, as a site built on
+  markdown-it reads it. Each element takes a style of the sheet, set by
+  `MarkdownStyles`; `make_stylesheet` adds `Quote`, `List Item`, `Table Cell`,
+  `Table Header` and `Display`. `markdown_flowables` gives the flowables, for
+  a frame or columns.
+- **Formulas by a composer**: the package typesets none, and depends on no
+  TeX. `formulas=` takes any callable that receives the text's distinct
+  formulas at once, as `MathFragment`, and returns for each a file — a
+  one-page PDF, laid down as vector drawing, or an image — and its box
+  (`TypesetMath`). `$…$` sits on the baseline, `$$…$$` is centred on its own
+  line, `$$…$$ (1)` with its label flush right; each is scaled to its line's
+  type size. A formula refused, or an image not found, is written as text,
+  logged and kept in `doc.markdown_problems`.
+- `reportlab_layout.texmath.TexFormulas`, a composer built on texformules,
+  with latexdetok to explain a refusal: the optional `texformules` extra,
+  Python 3.13 and later. A formula left open is refused before it reaches
+  LaTeX, where it would swallow the rest of the batch.
+- `examples/markdown.py`: a worked solution in Markdown, typeset by LaTeX.
+
 ## [1.10.0] — 2026-10-09
 
 ### Added

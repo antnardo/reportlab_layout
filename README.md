@@ -104,8 +104,18 @@ doc.advance(30)                                              # the cursor follow
   brings is written once per document, so the fonts many formulas share cost
   their size once: thirty-nine sheets of a hundred real formulas weigh 407 kB,
   against 1,087 kB with the same formulas as 600 dpi images.
-- **Two dependencies**, reportlab and Pillow, and pypdf for PDF pages, as the
-  `pdf` extra. No headless browser, no LaTeX, no system binary.
+- **Markdown with LaTeX formulas.** `draw_markdown` sets a Markdown text —
+  headings, lists, tables, quotations, code, images — from the cursor over as
+  many pages as it takes, read as markdown-it reads it for a web page. Its
+  formulas, `$…$` on the baseline and `$$…$$` displayed, are typeset by a
+  composer you hand it, all at once: `TexFormulas`, built on texformules, typesets them with a real
+  LaTeX and your preamble, in one compilation. A formula it refuses is written
+  as it stands, and reported; the document goes on. See
+  [Markdown with formulas](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md#markdown-with-formulas).
+- **Two dependencies**, reportlab and Pillow. The rest is optional: pypdf for
+  PDF pages (`pdf`), markdown-it-py and mdit-py-plugins for Markdown
+  (`markdown`), texformules and latexdetok to typeset formulas with LaTeX
+  (`texformules`). No headless browser, and no LaTeX unless you ask for it.
 
 ## How it compares
 
@@ -202,6 +212,8 @@ you still want to write text as it comes, without counting points by hand.
   images, frames, columns, pagination.
 - [`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py) — a one-page
   document, flow and absolute drawing mixed.
+- [`examples/markdown.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/markdown.py) — a
+  worked solution written in Markdown, its formulas typeset by LaTeX.
 - [`examples/annotations.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/annotations.py) — a marked
   copy whose marks are annotations a reader can move.
 - [`scripts/centering_proof.py`](https://github.com/antnardo/reportlab_layout/blob/main/scripts/centering_proof.py) — the visual

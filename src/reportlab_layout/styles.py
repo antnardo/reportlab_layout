@@ -52,7 +52,10 @@ def make_stylesheet() -> StyleSheet1:
     """Return a fresh stylesheet, extended with the usual alignments.
 
     Styles added: ``Left``, ``Right``, ``Centered``, ``Justify``, ``Small``,
-    ``Footer``, ``Heading1 Centered``, ``Heading1 Left``.
+    ``Footer``, ``Heading1 Centered``, ``Heading1 Left``; and those that
+    :class:`~reportlab_layout.MarkdownStyles` names by default, derived from
+    ``BodyText``: ``Quote``, ``List Item``, ``Table Cell``, ``Table Header`` and
+    ``Display``.
     """
     stylesheet = getSampleStyleSheet()
     add_style(stylesheet, "Left", alignment=TA_LEFT)
@@ -63,6 +66,11 @@ def make_stylesheet() -> StyleSheet1:
     add_style(stylesheet, "Footer", fontSize=6, leading=8)
     add_style(stylesheet, "Heading1 Centered", parent="Heading1", alignment=TA_CENTER)
     add_style(stylesheet, "Heading1 Left", parent="Heading1", alignment=TA_LEFT)
+    add_style(stylesheet, "Quote", parent="BodyText", textColor="#444444")
+    add_style(stylesheet, "List Item", parent="BodyText", spaceBefore=2)
+    add_style(stylesheet, "Table Cell", parent="BodyText", spaceBefore=0)
+    add_style(stylesheet, "Table Header", parent="Table Cell", fontName="Helvetica-Bold")
+    add_style(stylesheet, "Display", parent="BodyText", alignment=TA_CENTER, spaceBefore=6, spaceAfter=6)
     return stylesheet
 
 

@@ -29,6 +29,14 @@ from reportlab_layout.images import (
     inline_image,
     load_image,
 )
+from reportlab_layout.markdown import (
+    MarkdownProblem,
+    MarkdownStyles,
+    MathComposer,
+    MathFragment,
+    TypesetMath,
+    markdown_flowables,
+)
 from reportlab_layout.metrics import (
     TextMetrics,
     baseline_offset,
@@ -57,6 +65,10 @@ __all__ = [
     "ImageSpec",
     "InlineParagraph",
     "Margins",
+    "MarkdownProblem",
+    "MarkdownStyles",
+    "MathComposer",
+    "MathFragment",
     "NumberedCanvas",
     "OutputLike",
     "PDFMaker",
@@ -70,6 +82,7 @@ __all__ = [
     "TaggedParagraph",
     "TextMetrics",
     "TextPainter",
+    "TypesetMath",
     "Writable",
     "__version__",
     "add_style",
@@ -86,6 +99,7 @@ __all__ = [
     "keep_with_next",
     "load_image",
     "make_stylesheet",
+    "markdown_flowables",
     "pack_columns",
     "pdf_page",
     "register_font_family",

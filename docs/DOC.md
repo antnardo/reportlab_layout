@@ -14,6 +14,7 @@
 - [Images](#images)
 - [Images inside a line](#images-inside-a-line)
 - [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing)
+- [Markdown with formulas](#markdown-with-formulas)
 - [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
 - [Annotations a reader can move](#annotations-a-reader-can-move)
 - [Styles](#styles)
@@ -778,6 +779,170 @@ resources refer back to themselves, and an encrypted output document, whose
 copied streams reportlab would leave unencrypted. Only the page's drawing comes
 across, not its links or annotations.
 
+## Markdown with formulas
+
+A text written in Markdown, its formulas in LaTeX between dollars — the kind a
+site shows with markdown-it and KaTeX — goes on the page with `draw_markdown`.
+It flows from the cursor over as many pages as it takes, like the other
+`draw_*` calls, and returns a `Box`. It takes the `markdown` extra, and the
+`texformules` extra to typeset the formulas with LaTeX:
+
+```bash
+pip install "reportlab_layout[markdown,pdf,texformules]"
+```
+
+```python
+from reportlab_layout import PDFMaker, make_stylesheet
+from reportlab_layout.texmath import TexFormulas
+
+formulas = TexFormulas(preamble=r"\usepackage{amsmath,siunitx}")
+with PDFMaker("solution.pdf", stylesheet=make_stylesheet()) as doc:
+    doc.draw_markdown(text, formulas=formulas, base="figures")
+```
+
+[`examples/markdown.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/markdown.py)
+sets a worked solution that way. Its one wrong formula is written as it stands,
+and the run prints why:
+
+```text
+formula $\frac{1}{2$: “$” never closed; “{” of “\frac” never closed
+```
+
+![A worked solution set from Markdown, its formulas typeset by LaTeX](img/markdown.png)
+
+### What it reads
+
+The text is read by markdown-it-py in CommonMark, with tables, strikethrough
+and the `dollarmath` plugin of mdit-py-plugins, `$$…$$` allowed inside a line:
+the reading a site built on markdown-it gives it, so that the PDF and the page
+cut the text the same way. Raw HTML is not interpreted; it is written as text.
+
+| Markdown | On the page |
+| --- | --- |
+| `# …` to `###### …` | a heading, kept on the page of the block after it |
+| a paragraph | a paragraph; a single line break is a space, two spaces or `\` at the end of a line break it |
+| `**bold**`, `*italic*`, `~~struck~~` | `<b>`, `<i>`, `<strike>` — a TrueType family needs [`register_font_family`](#truetype-fonts) |
+| `` `code` `` | the font of the code blocks, on a grey ground |
+| `[text](url)` | a link, in `link_color` |
+| `$…$` | a formula on the baseline, its depth below it |
+| `$$…$$`, on its lines or inside a paragraph | a formula centred on a line of its own; `$$…$$ (1)` puts `(1)` flush right on its baseline |
+| ```` ``` ```` blocks, indented code | preformatted, unbroken lines |
+| `-`, `*`, `1.`, nested | lists, bullets changing with the depth, numbers from the first item's |
+| `> …` | a quotation, indented, a rule down its left |
+| a table | a table, its heading row in bold and repeated on every page, each column aligned as its `:---:` says |
+| `![alt](path)` | alone in its paragraph, an image centred and no wider than the text; inside a sentence, on the baseline |
+| `---` | a rule across the width |
+
+An image path is relative to `base`, the current folder by default. A one-page
+PDF is laid down as [vector drawing](#pdf-pages-as-vector-drawing), any other
+file as an image, a pixel to a point unless it is too wide. An address
+(`https://…`) is not fetched.
+
+### The formula composer
+
+This package typesets no formula: no renderer that does without LaTeX knows
+the macros of a real preamble, and it depends on no TeX. `formulas=` is a
+*composer*, any callable that receives the list of the text's distinct
+formulas and returns one result for each, in the same order:
+
+```python
+from reportlab_layout import MathFragment
+
+def composer(fragments: Sequence[MathFragment]) -> Sequence[TypesetMath]: ...
+```
+
+A `MathFragment` holds `latex`, the formula without its dollars as written, and
+`display`, true for `$$…$$`; its `source` puts the dollars back. A result has
+the attributes of the `TypesetMath` protocol, any object does:
+
+| Attribute | What it says |
+| --- | --- |
+| `file` | a one-page PDF or an image, told apart by their content; `None` refuses the formula |
+| `width`, `height` | the total size of its box, in PDF points |
+| `depth` | how far below the baseline the box reaches |
+| `size` | the type size it was typeset at: the formula is scaled to its line's, a heading's included |
+| `error` | why it is refused |
+
+The composer is called **once per text**, with every formula at once, so that
+one that compiles does it in a single batch. A displayed formula wider than the
+text is scaled down to fit, its label included.
+
+**`TexFormulas`**, in `reportlab_layout.texmath`, is a composer built on
+[texformules](https://pypi.org/project/texformules/), which typesets the
+missing formulas with a real LaTeX and the preamble given, in one compilation,
+and keeps each in a cache as a one-page PDF and a PNG with its baseline:
+
+```python
+TexFormulas()                                  # a FormulaBook on default_cache(), amsmath, amssymb, siunitx
+TexFormulas(preamble=r"\input{mymacros}")      # FormulaBook's keywords: preamble, engine, size, dpi…
+TexFormulas(FormulaBook(cache), vector=False)  # a book of your own; the PNG rather than the PDF
+```
+
+Each formula is first read by latexdetok, through texformules: one whose `$` or
+brace is left open never reaches LaTeX, where it would swallow the rest of the
+batch; it is refused with what latexdetok saw. One LaTeX rejects is refused with
+LaTeX's message, preceded by what latexdetok sees wrong in it, if anything. The
+lines of a displayed formula are joined, their `%` comments removed, and
+`$$…$$` is set in `\displaystyle`. The `texformules` extra needs Python 3.13
+and a TeX distribution on the `PATH`; without TeX, every formula is refused
+with the reason.
+
+### What could not be set
+
+A formula the composer refuses — or every formula, without a composer — is
+written as it stands, dollars included, in the font of inline code. An image
+whose file is missing or unreadable, or that is an address, is written as its
+alternative text in brackets. Neither stops the document: each is logged as a
+warning, on the `reportlab_layout.markdown` logger, and appended to
+`doc.markdown_problems`, a list of `MarkdownProblem(kind, source, message)` —
+`kind` is `"formula"` or `"image"`, `source` what the text says.
+
+```python
+for problem in doc.markdown_problems:
+    print(f"{problem.kind} {problem.source}: {problem.message}")
+```
+
+### The style of each element
+
+`styles=MarkdownStyles(…)` gives each element its style, a `ParagraphStyle` or a
+name in the document's stylesheet:
+
+| Field | Default | For |
+| --- | --- | --- |
+| `paragraph` | `"BodyText"` | the paragraphs, and the base of the fallbacks |
+| `headings` | `"Heading1"` … `"Heading6"` | one per level |
+| `code` | `"Code"` | the code blocks; its font is inline code's too |
+| `quote` | `"Quote"` | the paragraphs of a quotation |
+| `item` | `"List Item"` | the paragraphs of a list item; the bullets take its font |
+| `cell`, `header` | `"Table Cell"`, `"Table Header"` | the cells of a table, and of its heading row |
+| `display` | `"Display"` | displayed formulas and images: their space around, the label's font |
+| `code_background` | `"#eeeeee"` | behind inline code; `None` for none |
+| `link_color` | `"#1a5fb4"` | the links |
+| `rule_color`, `rule_width` | `"#999999"`, `0.5` | `---`, the lines of a table, the bar of a quotation |
+| `list_indent` | `18` | the indent of a list's text, in points, at every level |
+| `bullets` | `("•", "–", "◦")` | the bullets of each depth, in turn |
+| `quote_indent` | `14` | the indent of a quotation, in points |
+
+`make_stylesheet()` defines the five names reportlab lacks — `Quote`,
+`List Item`, `Table Cell`, `Table Header`, `Display` — derived from `BodyText`.
+With a sheet of your own that lacks a name, the element falls back on a style
+derived from `paragraph`, so a text always sets.
+
+### In a frame or in columns
+
+`markdown_flowables(text, …)` returns the flowables `draw_markdown` lays down,
+with the same `stylesheet`, `styles`, `formulas`, `base` and `problems` (a list
+to append to), and the `width` they will be set in, which sizes images and
+tables. Pass them through `keep_with_next` so that a heading stays with its
+text, then to [`draw_columns`](#columns) or a [frame](#frames).
+
+`draw_markdown` breaks pages whatever `auto_page_break` says, as `draw_columns`
+does. A heading moves to the next page with the block after it; a block taller
+than what is left splits — a paragraph between two lines, a list between two
+items, a quotation between two of its blocks, a table between two rows. The box
+returned spans the text on the page where it ends, across the content width,
+and the cursor stands under it.
+
 ## A tag at the end of a paragraph
 
 `TaggedParagraph` sets a tag flush right on the last line, as LaTeX does with
@@ -1306,6 +1471,20 @@ when you want several figures at once, since it computes them from one lookup.
 | `Packing` | what `pack_columns` returns: placements, leftovers, height | [Packing columns yourself](#packing-columns-yourself) |
 | `Placement` | where one flowable landed: column, depth, size | [Packing columns yourself](#packing-columns-yourself) |
 
+### Markdown
+
+| Name | What it is | Where |
+| --- | --- | --- |
+| `markdown_flowables` | the flowables of a Markdown text, for a frame or columns | [In a frame or in columns](#in-a-frame-or-in-columns) |
+| `MarkdownStyles` | the style of each element of the text | [The style of each element](#the-style-of-each-element) |
+| `MarkdownProblem` | a formula refused or an image not found, set as text | [What could not be set](#what-could-not-be-set) |
+| `MathFragment` | a formula of the text, as a composer receives it | [The formula composer](#the-formula-composer) |
+| `TypesetMath` | what a composer returns for each formula | [The formula composer](#the-formula-composer) |
+| `MathComposer` | the composer's type: fragments in, results out | [The formula composer](#the-formula-composer) |
+
+`TexFormulas` lives in `reportlab_layout.texmath`, which imports texformules,
+and is not exported by the package itself.
+
 ### What `PDFMaker` offers
 
 Its own sections describe these; the list is here so that nothing is hidden.
@@ -1315,7 +1494,7 @@ Its own sections describe these; the list is here so that nothing is hidden.
   `add_space`, `reset_cursor`.
 - **Factories** — `make_paragraph`, `make_spacer`, `make_table`, `make_image`.
 - **Flow and absolute placement** — `draw`, `draw_paragraph`, `draw_table`,
-  `draw_image`, `draw_centered_line`, `draw_columns`.
+  `draw_image`, `draw_centered_line`, `draw_columns`, `draw_markdown`.
 - **Straight onto the canvas** — `draw_string`, `apply_style`, `metrics`,
   `draw_line`, `draw_rect`, `draw_round_rect`, `draw_ellipse`, `draw_circle`,
   `draw_polygon`, `draw_regular_polygon`, `draw_pdf_page`.
@@ -1325,7 +1504,7 @@ Its own sections describe these; the list is here so that nothing is hidden.
 - **Frames** — `new_frame`, `draw_frame`, `frame_paragraph`, `frame_space`,
   `frame_image`.
 - **Attributes** — the parts: `canvas`, `geometry`, `cursor`, `shapes`, `text`,
-  `stylesheet`, `active_frame`. The settings, all writable after construction:
+  `stylesheet`, `active_frame`, `markdown_problems`. The settings, all writable after construction:
   `unit`, `font_size`, `default_space`, `auto_page_break`, `show_boundaries`,
   `header`, `footer`, `page`. And the geometry snapshots: `width`, `height`,
   `left`, `right`, `top`, `bottom`, `content_width`, `content_height`,

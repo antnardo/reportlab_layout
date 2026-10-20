@@ -37,6 +37,14 @@ dependencies = [
 [project.optional-dependencies]
 # Reading the pages of other PDFs, to lay them down as vector drawing.
 pdf = ["pypdf>=4.0"]
+markdown = [
+    "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.4",
+]
+texformules = [
+    "latexdetok>=0.7 ; python_full_version >= '3.13'",
+    "texformules>=0.2 ; python_full_version >= '3.13'",
+]
 
 [project.urls]
 Homepage = "https://github.com/antnardo/reportlab_layout"
@@ -52,6 +60,9 @@ dev = [
     "pypdf>=4.0",
     "ruff>=0.6",
     "mypy>=1.11",
+    "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.4",
+    "texformules>=0.2 ; python_full_version >= '3.13'",
 ]
 
 # The version lives in the module: a single source, which the publish workflow

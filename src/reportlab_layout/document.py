@@ -36,11 +36,12 @@ from reportlab.platypus.doctemplate import ActionFlowable
 from reportlab_layout.annotations import AppearanceAnnotation, form_resources
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
-from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, pack_columns
+from reportlab_layout.columns import _UNBOUNDED, Packing, balanced_height, keep_with_next, pack_columns
 from reportlab_layout.cursor import Cursor
 from reportlab_layout.frames import FrameWriter
 from reportlab_layout.geometry import PageGeometry
 from reportlab_layout.images import ImageLike, load_image
+from reportlab_layout.markdown import MarkdownProblem, MarkdownStyles, MathComposer, markdown_flowables
 from reportlab_layout.metrics import TextMetrics
 from reportlab_layout.pdfpages import PdfSource, draw_pdf_page
 from reportlab_layout.shapes import ShapePainter
@@ -301,6 +302,8 @@ class PDFMaker:
         self._warned: set[str] = set()
         self._annotations = itertools.count(1)  # names the forms that draw annotations
         self._annotating = False  # inside an annotation block, where a page cannot end
+        #: What :meth:`draw_markdown` could not set as written: formulas refused, images not found.
+        self.markdown_problems: list[MarkdownProblem] = []
 
         self._export_geometry()
         self.canvas.setFontSize(self.font_size)
@@ -792,6 +795,48 @@ class PDFMaker:
         page is taken. See :func:`~reportlab_layout.draw_pdf_page`.
         """
         return draw_pdf_page(self.canvas, page, x, y, width, height, scale)
+
+    def draw_markdown(
+        self,
+        text: str,
+        *,
+        formulas: MathComposer | None = None,
+        styles: MarkdownStyles | None = None,
+        base: str | os.PathLike[str] | None = None,
+        show_boundary: bool | None = None,
+    ) -> Box:
+        """Set a Markdown text from the cursor, over as many pages as it takes.
+
+        ``formulas`` typesets the formulas, ``$…$`` and ``$$…$$``, all of them
+        in one call: see :mod:`reportlab_layout.markdown`. Without it, or for a
+        formula it refuses, the formula is written as it stands. ``styles``
+        gives each element its style, ``base`` the folder relative image paths
+        start from. What could not be set as written is logged and appended to
+        :attr:`markdown_problems`.
+
+        The text breaks pages whatever ``auto_page_break`` says, as
+        :meth:`draw_columns` does: a heading moves with the block after it, and
+        a block taller than what is left splits, a paragraph between two lines,
+        a list between two items, a table between two rows, its heading
+        repeated. The box returned spans the text on the page where it ends,
+        across the content width; the cursor stands under it. Needs the
+        ``markdown`` extra.
+        """
+        start_page, top = self.page, self.cursor_y
+        story = markdown_flowables(
+            text,
+            stylesheet=self.stylesheet,
+            styles=styles,
+            formulas=formulas,
+            base=None if base is None else os.fspath(base),
+            width=self.content_width,
+            problems=self.markdown_problems,
+        )
+        for flowable in keep_with_next(story):
+            self.draw(flowable, page_break=True, show_boundary=show_boundary)
+        if self.page != start_page:
+            top = self.geometry.depth_to_y(self.cursor.top)
+        return Box(self.left, self.cursor_y, self.content_width, top - self.cursor_y)
 
     def draw_centered_line(self, y: float | None = None, wscale: float = 1.0, **kwargs: Any) -> Box:
         """Draw a horizontal rule centred on the content width.
