@@ -811,6 +811,14 @@ An image's box is its placement, a path's the box of its points, widened by
 half the line width when it is stroked, a shading's the clipping box it fills.
 The elements inside a form are listed one by one, and filtered.
 
+Rules written against another reader's coordinates are best moved onto the
+origin, the one point every reader agrees on. pdfplumber's `x0`, `fontname` and
+`size` are the element's `box[0]`, `font` and `size`, but its `top` is neither
+the box's top nor a fixed distance from the baseline: in Courier-Bold, 7.25 pt
+above it at 9 pt and 8.06 pt at 10 pt, in Helvetica 4.76 pt at 6 pt. Count from
+the page's own height, not from that of A4 — a payslip from the French state is
+864 points high.
+
 **What goes is exactly what was refused.** A glyph goes alone: the glyphs after
 it in the same string keep their place, to the hundredth of a point, so a zone
 can cut a word. A path goes with its construction — a clipping path stays,
