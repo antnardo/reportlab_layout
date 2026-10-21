@@ -56,8 +56,17 @@ from xml.sax.saxutils import quoteattr
 from reportlab.pdfbase import pdfdoc
 
 from reportlab_layout.boxes import Box
+from reportlab_layout.pdfcontent import Keep, PdfElement, walk_page
 
-__all__ = ["PdfPage", "PdfSource", "draw_pdf_page", "inline_pdf", "pdf_page", "pdf_placeholders"]
+__all__ = [
+    "PdfPage",
+    "PdfSource",
+    "draw_pdf_page",
+    "inline_pdf",
+    "pdf_elements",
+    "pdf_page",
+    "pdf_placeholders",
+]
 
 PdfSource: TypeAlias = "str | Path | bytes | IO[bytes] | PdfPage"
 """A PDF page, or a PDF to take a page from: a path, its bytes or a binary file."""
@@ -147,6 +156,8 @@ def draw_pdf_page(
     width: float | None = None,
     height: float | None = None,
     scale: float | None = None,
+    *,
+    keep: Keep | None = None,
 ) -> Box:
     """Draw a PDF page on a reportlab canvas, its lower-left corner at ``(x, y)``.
 
@@ -154,10 +165,17 @@ def draw_pdf_page(
     ``width``, ``height``, ``scale``, the aspect ratio kept -- or ``width`` and
     ``height`` together. Any canvas will do, a flowable's ``self.canv`` included;
     the page and what it uses are written into its document once.
+
+    ``keep``, given, is asked about every glyph, image, painted path and
+    shading of the page (see :class:`~reportlab_layout.PdfElement`): what it
+    refuses is left out, and the page is otherwise drawn as it was. Only the
+    resources the remaining content uses come along, and marked content loses
+    the texts it repeats in clear -- what a redaction needs. See
+    :mod:`reportlab_layout.pdfcontent`.
     """
     page = pdf_page(page)
     width, height = page.size(width, height, scale)
-    name = _importer(canvas).form(page)
+    name = _importer(canvas).form(page, keep)
     x1, y1, x2, y2 = page.box
     sx, sy = width / (x2 - x1), height / (y2 - y1)
     canvas.saveState()
@@ -165,6 +183,17 @@ def draw_pdf_page(
     canvas.doForm(name)
     canvas.restoreState()
     return Box(x, y, width, height)
+
+
+def pdf_elements(source: PdfSource, index: int = 0) -> list[PdfElement]:
+    """What page ``index`` draws, in the order it draws it: glyphs, images, paths, shadings.
+
+    Read the output of a redaction with it to check that nothing of what was
+    taken out is still drawn.
+    """
+    page = pdf_page(source, index)
+    walk, _, _ = walk_page(_reader(page.data), page.index, None)
+    return walk.elements
 
 
 def inline_pdf(
@@ -283,18 +312,25 @@ class _Importer:
         self.objects: dict[bytes, Any] = {}  # digest -> what to write in place of a reference
         self.forms: dict[str, str] = {}  # page key -> form name
 
-    def form(self, page: PdfPage) -> str:
+    def form(self, page: PdfPage, keep: Keep | None = None) -> str:
+        if keep is not None:
+            return self._write(page, keep)  # what stays depends on the predicate: no cache by page
         name = self.forms.get(page.key)
         if name is None:
-            name = self.forms[page.key] = self._write(page)
+            name = self.forms[page.key] = self._write(page, None)
         return name
 
-    def _write(self, page: PdfPage) -> str:
+    def _write(self, page: PdfPage, keep: Keep | None) -> str:
         generic = _pypdf().generic
-        source = _reader(page.data).pages[page.index]
+        reader = _reader(page.data)
+        source = reader.pages[page.index]
         digests = _Digests(generic)
-        content, entries = _content(source, generic)
-        resources = source.get("/Resources", generic.DictionaryObject())
+        if keep is None:
+            content, entries = _content(source, generic)
+            resources = source.get("/Resources", generic.DictionaryObject())
+        else:
+            _, program, resources = walk_page(reader, page.index, keep)
+            content, entries = zlib.compress(program), {"Filter": generic.NameObject("/FlateDecode")}
         group = source.get("/Group")
         parts = [repr(page.box).encode(), _sized(content), digests.canonical(resources)]
         parts += [digests.canonical(entry) for entry in entries.values()]

@@ -30,6 +30,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   Python 3.13 and later. A formula left open is refused before it reaches
   LaTeX, where it would swallow the rest of the batch.
 - `examples/markdown.py`: a worked solution in Markdown, typeset by LaTeX.
+- **Taking elements out of a page**, with the `pdf` extra. `pdf_elements`
+  lists what a page draws, glyph by glyph — each with its box, origin,
+  Unicode text, font and size — and every image, painted path and shading.
+  `draw_pdf_page(..., keep=…)` leaves out what the predicate refuses, and
+  `redact_pdf(source, output, keep)` does it for a whole PDF, into a new one.
+  A glyph goes alone, the others keeping their place; the page is otherwise
+  drawn as it was. Only the resources still used are copied, marked content
+  loses its `ActualText` and `Alt`, and nothing of the source's catalogue
+  comes along; a font that cannot be measured is refused rather than guessed.
+  Asked for by bpaye, to anonymise payslips.
 
 ## [1.10.0] — 2026-10-09
 

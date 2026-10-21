@@ -14,6 +14,7 @@
 - [Images](#images)
 - [Images inside a line](#images-inside-a-line)
 - [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing)
+- [Taking elements out of a page](#taking-elements-out-of-a-page)
 - [Markdown with formulas](#markdown-with-formulas)
 - [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
 - [Annotations a reader can move](#annotations-a-reader-can-move)
@@ -779,6 +780,68 @@ resources refer back to themselves, and an encrypted output document, whose
 copied streams reportlab would leave unencrypted. Only the page's drawing comes
 across, not its links or annotations.
 
+## Taking elements out of a page
+
+`pdf_elements` lists what a page draws, in the order it draws it: every glyph,
+image, painted path and shading, with its box on the page. `keep`, given to
+`draw_pdf_page`, decides about each of them, and what it refuses is left out of
+the copy. `redact_pdf` does that for every page of a PDF, into a new one:
+
+```python
+from reportlab_layout import pdf_elements, redact_pdf
+
+def keep(element):
+    if element.kind == "text" and element.font.endswith("Datamatrix"):
+        return False                                   # a barcode set as text
+    x1, y1, x2, y2 = element.box
+    return not (x2 > 40 and x1 < 185 and y2 > 730 and y1 < 742)   # the zone of a number
+
+removed = redact_pdf("payslip.pdf", "payslip-anonymous.pdf", keep)
+assert not any(not keep(e) for e in pdf_elements("payslip-anonymous.pdf"))
+```
+
+Each element is a `PdfElement`: its `kind` (`"text"`, `"image"`, `"path"` or
+`"shading"`), its `box` — `(x1, y1, x2, y2)` in the source page's coordinates,
+in points, `y` upwards — and its `page`. A glyph also has its `origin` on the
+baseline, its `text` as far as the font tells, its `font`, the `/BaseFont` as
+written, subset prefix included, and its `size` on the page. Its box runs along
+the baseline from the origin over the glyph's advance, and across from the
+font's descent to its ascent; a rotated glyph gets the upright box around it.
+An image's box is its placement, a path's the box of its points, widened by
+half the line width when it is stroked, a shading's the clipping box it fills.
+The elements inside a form are listed one by one, and filtered.
+
+**What goes is exactly what was refused.** A glyph goes alone: the glyphs after
+it in the same string keep their place, to the hundredth of a point, so a zone
+can cut a word. A path goes with its construction — a clipping path stays,
+since what it clips stays — and an image with its call. The rest of the page is
+drawn as it was, in the same order, in the same fonts.
+
+**Nothing else stays behind.** That is what a redaction needs, and a box drawn
+over the original does not do: the text stays under it, and the file keeps
+more copies of it.
+
+- The page is copied into a new document: the source's XMP metadata, structure
+  tree, information dictionary, annotations, form fields, attachments and
+  outlines are never read, let alone copied.
+- Only the resources the remaining content uses are copied: an image taken
+  out does not ride along in the file.
+- Marked content loses its `ActualText`, `Alt` and `E` entries, which can
+  repeat the text in clear.
+- A font that cannot be measured is refused with `ValueError` rather than
+  guessed — vertical writing, a composite font whose CMap is not
+  `Identity-H`, a simple font without `/Widths` that is not one of the
+  fourteen standard ones — since one wrong width shifts every glyph after it.
+
+What stays is the font programs: a subset embedded for the page keeps the
+glyphs it was made with, and its `ToUnicode` map their characters — which
+characters, not where nor in what order. An image is kept or taken out whole;
+its pixels are never masked. Text turned into outlines is a path. Check the
+output before sharing it, with `pdf_elements` or another reader's text
+extraction: checked on four hundred formulas typeset by LuaLaTeX, cut in half,
+neither `pdf_elements` nor poppler's `pdftotext` finds a glyph of the half taken
+out, and the glyphs kept have not moved.
+
 ## Markdown with formulas
 
 A text written in Markdown, its formulas in LaTeX between dollars — the kind a
@@ -1457,6 +1520,10 @@ when you want several figures at once, since it computes them from one lookup.
 | `pdf_page` | reads a page of a PDF | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
 | `draw_pdf_page` | lays a PDF page down on any canvas, as vector drawing | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
 | `inline_pdf` | the tag of a PDF page standing on the baseline, for an `InlineParagraph` | [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing) |
+| `PdfElement` | one glyph, image, path or shading a page draws, and its box | [Taking elements out of a page](#taking-elements-out-of-a-page) |
+| `Keep` | the predicate that decides whether an element stays | [Taking elements out of a page](#taking-elements-out-of-a-page) |
+| `pdf_elements` | what a page of a PDF draws, element by element | [Taking elements out of a page](#taking-elements-out-of-a-page) |
+| `redact_pdf` | a PDF written again without what a predicate refuses | [Taking elements out of a page](#taking-elements-out-of-a-page) |
 | `FrameWriter` | fills a reportlab `Frame` and reports what overflowed | [Frames](#frames) |
 
 ### Paragraphs and columns

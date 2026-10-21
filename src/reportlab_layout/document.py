@@ -43,6 +43,7 @@ from reportlab_layout.geometry import PageGeometry
 from reportlab_layout.images import ImageLike, load_image
 from reportlab_layout.markdown import MarkdownProblem, MarkdownStyles, MathComposer, markdown_flowables
 from reportlab_layout.metrics import TextMetrics
+from reportlab_layout.pdfcontent import Keep
 from reportlab_layout.pdfpages import PdfSource, draw_pdf_page
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, resolve_style
@@ -787,14 +788,17 @@ class PDFMaker:
         width: float | None = None,
         height: float | None = None,
         scale: float | None = None,
+        *,
+        keep: Keep | None = None,
     ) -> Box:
         """Draw a page of a PDF as vector drawing, its lower-left corner at ``(x, y)``.
 
         Canvas coordinates in points, like the shapes; ``page`` is a
         :class:`~reportlab_layout.PdfPage` or a PDF (path, bytes, file) whose first
-        page is taken. See :func:`~reportlab_layout.draw_pdf_page`.
+        page is taken. ``keep`` leaves out what it refuses, for a redaction. See
+        :func:`~reportlab_layout.draw_pdf_page`.
         """
-        return draw_pdf_page(self.canvas, page, x, y, width, height, scale)
+        return draw_pdf_page(self.canvas, page, x, y, width, height, scale, keep=keep)
 
     def draw_markdown(
         self,

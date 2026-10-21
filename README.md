@@ -104,6 +104,11 @@ doc.advance(30)                                              # the cursor follow
   brings is written once per document, so the fonts many formulas share cost
   their size once: thirty-nine sheets of a hundred real formulas weigh 407 kB,
   against 1,087 kB with the same formulas as 600 dpi images.
+- **Redaction, not a box drawn over.** `redact_pdf` writes a PDF again
+  without the glyphs, images and paths a predicate refuses — a zone, a font,
+  a word — the rest drawn as it was. The file keeps no text under a box, no
+  image left unused, no metadata: of what was taken out, only the shapes of
+  the font subsets' glyphs remain, not which glyph went where.
 - **Markdown with LaTeX formulas.** `draw_markdown` sets a Markdown text —
   headings, lists, tables, quotations, code, images — from the cursor over as
   many pages as it takes, read as markdown-it reads it for a web page. Its
