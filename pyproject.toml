@@ -44,6 +44,8 @@ markdown = [
 texformules = [
     "latexdetok>=0.7 ; python_full_version >= '3.13'",
     "texformules>=0.2 ; python_full_version >= '3.13'",
+    # its formulas come as one-page PDFs, which only pypdf reads
+    "pypdf>=4.0 ; python_full_version >= '3.13'",
 ]
 
 [project.urls]

@@ -803,6 +803,7 @@ pdf = [
 ]
 texformules = [
     { name = "latexdetok", marker = "python_full_version >= '3.13'" },
+    { name = "pypdf", marker = "python_full_version >= '3.13'" },
     { name = "texformules", marker = "python_full_version >= '3.13'" },
 ]
 
@@ -824,6 +825,7 @@ requires-dist = [
     { name = "markdown-it-py", marker = "extra == 'markdown'", specifier = ">=3.0" },
     { name = "mdit-py-plugins", marker = "extra == 'markdown'", specifier = ">=0.4" },
     { name = "pillow", specifier = ">=10.0" },
+    { name = "pypdf", marker = "python_full_version >= '3.13' and extra == 'texformules'", specifier = ">=4.0" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=4.0" },
     { name = "reportlab", specifier = ">=4.0" },
     { name = "texformules", marker = "python_full_version >= '3.13' and extra == 'texformules'", specifier = ">=0.2" },

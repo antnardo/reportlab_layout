@@ -3,6 +3,15 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **The `texformules` extra brings pypdf.** `TexFormulas` hands over its
+  formulas as one-page PDFs, which only pypdf reads; with
+  `reportlab_layout[markdown,texformules]` alone, the first formula raised
+  `ImportError`, asking for the `pdf` extra.
+
 ## [1.11.0] — 2026-10-21
 
 ### Added

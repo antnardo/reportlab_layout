@@ -2,6 +2,7 @@
 
 import io
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -256,3 +257,10 @@ class TestInlinePdf:
             doc.draw(Paragraph(self.text(inline_pdf(black_page)), STYLE))
         assert forms(out) == []
         assert len(images(out)) == 1
+
+
+def test_the_texformules_extra_brings_what_its_formulas_need():
+    """TexFormulas hands over one-page PDFs by default, which only pypdf reads."""
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
+    assert any(requirement.startswith("pypdf") for requirement in extras["texformules"])
