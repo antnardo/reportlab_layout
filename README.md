@@ -118,10 +118,26 @@ doc.advance(30)                                              # the cursor follow
   formula it refuses is written as it stands, and reported; the document goes
   on. See
   [Markdown with formulas](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md#markdown-with-formulas).
-- **Two dependencies**, reportlab and Pillow. The rest is optional: pypdf for
-  PDF pages (`pdf`), markdown-it-py and mdit-py-plugins for Markdown
-  (`markdown`), texformules and latexdetok to typeset formulas with LaTeX
-  (`texformules`). No headless browser, and no LaTeX unless you ask for it.
+- **Two dependencies**, reportlab and Pillow; three extras for the rest, listed
+  below. No headless browser, and no LaTeX unless you ask for it.
+
+## Extras
+
+The core needs reportlab and Pillow only. PDF pages, Markdown and LaTeX formulas
+need more, installed as extras; a feature whose extra is missing says which one
+to install.
+
+```bash
+pip install "reportlab_layout[pdf]"                    # pages of other PDFs, redaction
+pip install "reportlab_layout[markdown]"               # Markdown, formulas by your own composer
+pip install "reportlab_layout[markdown,texformules]"   # Markdown, formulas typeset by LaTeX
+```
+
+| Extra | Installs | What it adds |
+| --- | --- | --- |
+| `pdf` | pypdf | A page of another PDF laid down as vector drawing, at a point or inside a line (`draw_pdf_page`, `inline_pdf`); what a page draws, element by element, and a PDF written again without what you refuse (`pdf_elements`, `redact_pdf`). |
+| `markdown` | markdown-it-py, mdit-py-plugins | A Markdown text set from the cursor over the pages (`draw_markdown`), its formulas typeset by a composer you hand it — one that hands over PDFs needs `pdf` too. |
+| `texformules` | texformules, latexdetok, pypdf | `TexFormulas`, a composer that typesets those formulas with LaTeX, in one compilation, and lays them down as vector drawing. Python 3.13 or later, and lualatex or pdflatex on the `PATH`. |
 
 ## How it compares
 
