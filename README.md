@@ -215,7 +215,8 @@ you still want to write text as it comes, without counting points by hand.
 
 - [`docs/DOC.md`](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md) — the full API
   reference: coordinate systems, placement, styles, metrics, fonts, inline
-  images, PDF pages, Markdown with formulas, frames, columns, pagination.
+  images, PDF pages, redaction, Markdown with formulas, annotations, frames,
+  columns, pagination.
 - [`examples/certificate.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/certificate.py) — a one-page
   document, flow and absolute drawing mixed.
 - [`examples/markdown.py`](https://github.com/antnardo/reportlab_layout/blob/main/examples/markdown.py) — a
@@ -228,7 +229,8 @@ you still want to write text as it comes, without counting points by hand.
 ## Compatibility
 
 Python 3.11 to 3.14, reportlab 4.x and 5.x. The continuous-integration matrix
-covers each of these eight combinations.
+covers each of these eight combinations. The `texformules` extra, which
+typesets formulas with LaTeX, needs Python 3.13 or later.
 
 ## Licence
 
