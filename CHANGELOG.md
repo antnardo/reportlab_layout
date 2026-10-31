@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.12.0] — 2026-10-31
 
 ### Added
 
@@ -17,7 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
   `box_padding` sets the inside of a frame. Classes nest and add up; an
   alignment acts on paragraphs, headings, images and formulas, not on lists,
   tables and code; a name the classes do not hold is reported and ignored.
-- A displayed image follows the alignment of its style, centred by default.
+
+### Changed
+
+- A displayed image or formula follows the alignment of its style — centred
+  still with the `Display` style of `make_stylesheet`, and with the fallback.
 
 ## [1.11.1] — 2026-10-22
 
