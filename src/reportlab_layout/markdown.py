@@ -8,6 +8,16 @@ gives it, so that the PDF and the page cut the text the same way. Raw HTML is no
 interpreted: it is written as text. Both packages are an optional dependency,
 ``reportlab_layout[markdown]``.
 
+**Classes** centre a block, grey a word, set a passage smaller. They take the two
+syntaxes that Pandoc, markdown-it-container and markdown-it-attrs share, rather than
+tags of this package's own, so that a text keeps meaning the same thing elsewhere:
+a fenced block, ``::: center`` … ``:::`` (or ``::: {.center .gray}``), around any
+blocks; a bracketed span, ``[a word]{.gray}``, inside a line. Each name is looked up
+in :attr:`MarkdownStyles.classes`, which maps it to a :class:`MarkdownClass` -- an
+alignment, a colour, a scale; ``center``, ``right``, ``gray`` and ``small`` come
+defined. A name it does not hold is reported and ignored: the text is set as if the
+class were not there.
+
 **The formulas are not typeset here.** No renderer that does without LaTeX knows
 what a real preamble defines, and this package depends on no TeX. A *formula
 composer* does it: any callable that takes the list of the text's formulas, as
@@ -32,13 +42,14 @@ whose file cannot be read.
 
 import logging
 import re
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
 from xml.sax.saxutils import escape, quoteattr
 
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Flowable, ListFlowable, ListItem, Table, TableStyle, XPreformatted
@@ -54,6 +65,8 @@ if TYPE_CHECKING:
     from markdown_it.tree import SyntaxTreeNode
 
 __all__ = [
+    "MARKDOWN_CLASSES",
+    "MarkdownClass",
     "MarkdownProblem",
     "MarkdownStyles",
     "MathComposer",
@@ -115,11 +128,50 @@ class TypesetMath(Protocol):
 MathComposer = Callable[[Sequence[MathFragment]], Sequence[TypesetMath]]
 
 
+_ALIGNMENTS = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
+
+
+@dataclass(frozen=True, slots=True)
+class MarkdownClass:
+    """What a class does to the text it is given to: ``::: name`` blocks, or ``[text]{.name}``.
+
+    ``alignment`` -- ``"left"``, ``"center"``, ``"right"`` or ``"justify"`` -- acts on
+    the paragraphs, headings, images and formulas of a block; not on lists, tables
+    and code, which keep their own; inside a line it has nothing to align, and is
+    reported. ``color`` is the colour of the text.
+    ``scale`` multiplies the type size and the leading, and the size of the
+    formulas set in them. Classes given together, or nested, add up: the inner
+    alignment and colour win, the scales multiply.
+    """
+
+    alignment: str | None = None
+    color: ColorLike | None = None
+    scale: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.alignment is not None and self.alignment not in _ALIGNMENTS:
+            raise ValueError(f"alignment must be one of {sorted(_ALIGNMENTS)}, got {self.alignment!r}")
+        if self.scale <= 0:
+            raise ValueError(f"scale must be positive, got {self.scale}")
+
+
+#: The classes every text knows; :attr:`MarkdownStyles.classes` starts from them.
+MARKDOWN_CLASSES: Mapping[str, MarkdownClass] = MappingProxyType(
+    {
+        "center": MarkdownClass(alignment="center"),
+        "right": MarkdownClass(alignment="right"),
+        "gray": MarkdownClass(color="#777777"),
+        "small": MarkdownClass(scale=0.85),
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class MarkdownProblem:
     """Something of the text that could not be set as written, and was set as text.
 
-    ``kind`` is ``"formula"`` or ``"image"``; ``source`` is what the text says.
+    ``kind`` is ``"formula"``, ``"image"`` or ``"class"`` (a name the classes do
+    not hold, ignored); ``source`` is what the text says.
     """
 
     kind: str
@@ -166,11 +218,16 @@ class MarkdownStyles:
     #: The bullets of each level of an unordered list, in turn.
     bullets: tuple[str, ...] = ("•", "–", "◦")
     quote_indent: float = 14
+    #: The names ``::: name`` and ``[text]{.name}`` may use; add your own, or rename,
+    #: with ``{**MARKDOWN_CLASSES, "gris": MARKDOWN_CLASSES["gray"]}``.
+    classes: Mapping[str, MarkdownClass] = field(default_factory=lambda: dict(MARKDOWN_CLASSES))
 
 
 def _parser() -> Any:
     try:
         from markdown_it import MarkdownIt
+        from mdit_py_plugins.attrs import attrs_plugin
+        from mdit_py_plugins.container import container_plugin
         from mdit_py_plugins.dollarmath import dollarmath_plugin
     except ImportError as error:  # pragma: no cover - depends on the installation
         raise ImportError(
@@ -179,6 +236,9 @@ def _parser() -> Any:
     parser = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False})
     parser.enable(["table", "strikethrough"])
     dollarmath_plugin(parser, double_inline=True)
+    # Every ``:::`` fence opens a block of classes; ``{…}`` only after ``[text]``.
+    container_plugin(parser, "classes", validate=lambda params, markup: True)
+    attrs_plugin(parser, after=(), spans=True)
     return parser
 
 
@@ -269,6 +329,8 @@ class _Builder:
         self.math: dict[MathFragment, _Set | None] = {}
         self._derived: dict[tuple[str, tuple[tuple[str, Any], ...]], ParagraphStyle] = {}
         self._resolved: dict[str, ParagraphStyle] = {}
+        self._block: list[MarkdownClass] = []  # the classes of the blocks around, outermost first
+        self._lists = 0  # how deep in lists: their items keep their alignment
         self.body = self.style("paragraph")
 
     # ------------------------------------------------------------------
@@ -313,10 +375,44 @@ class _Builder:
         return style
 
     def derive(self, style: ParagraphStyle, **changes: Any) -> ParagraphStyle:
-        key = (style.name, tuple(sorted(changes.items())))
+        key = (style.name, tuple(sorted((name, repr(value)) for name, value in changes.items())))
         if key not in self._derived:
             self._derived[key] = ParagraphStyle(f"{style.name}~{len(self._derived)}", parent=style, **changes)
         return self._derived[key]
+
+    def classes(self, names: str, source: str) -> list[MarkdownClass]:
+        """The classes ``names`` gives -- ``center gray``, ``{.center .gray}`` -- the unknown reported."""
+        found: list[MarkdownClass] = []
+        for word in names.replace("{", " ").replace("}", " ").split():
+            if word.startswith("#") or "=" in word:
+                continue  # an identifier or an attribute: nothing to set
+            name = word.lstrip(".")
+            if name in self.styles.classes:
+                found.append(self.styles.classes[name])
+            else:
+                self.problems.append(MarkdownProblem("class", source, f"no class {name!r}"))
+                logger.warning("class %r of %s ignored: the classes do not hold it", name, source)
+        return found
+
+    def dressed(
+        self, style: ParagraphStyle, classes: Sequence[MarkdownClass], *, align: bool = True
+    ) -> ParagraphStyle:
+        """``style`` as ``classes`` change it, outermost first."""
+        alignment = color = None
+        scale = 1.0
+        for each in classes:
+            alignment = each.alignment or alignment
+            color = each.color if each.color is not None else color
+            scale *= each.scale
+        changes: dict[str, Any] = {}
+        if align and alignment is not None:
+            changes["alignment"] = _ALIGNMENTS[alignment]
+        if color is not None:
+            changes["textColor"] = to_color(color)
+        if scale != 1.0:
+            changes["fontSize"] = style.fontSize * scale
+            changes["leading"] = style.leading * scale
+        return self.derive(style, **changes) if changes else style
 
     def warn(self, kind: str, source: str, message: str) -> None:
         self.problems.append(MarkdownProblem(kind, source, message))
@@ -372,7 +468,7 @@ class _Builder:
 
     def display_math(self, node: "SyntaxTreeNode") -> Flowable:
         fragment = _fragment(node)
-        style = self.style("display")
+        style = self.dressed(self.style("display"), self._block)
         typeset = self.math.get(fragment)
         label = node.info if node.type == "math_block_label" else ""
         if typeset is None:
@@ -407,7 +503,15 @@ class _Builder:
         if kind in _MATH_BLOCK:
             return [self.display_math(node)]
         if kind in ("fence", "code_block"):
-            return [XPreformatted(escape(node.content.rstrip("\n")), self.style("code"))]
+            code = self.dressed(self.style("code"), self._block, align=False)
+            return [XPreformatted(escape(node.content.rstrip("\n")), code)]
+        if kind.startswith("container_"):
+            mark = len(self._block)
+            self._block += self.classes(node.info, f"::: {node.info.strip()}")
+            try:
+                return self.blocks(node.children, width, depth)
+            finally:
+                del self._block[mark:]
         if kind in ("bullet_list", "ordered_list"):
             return [self.listing(node, width, depth)]
         if kind == "blockquote":
@@ -441,8 +545,14 @@ class _Builder:
 
     def listing(self, node: "SyntaxTreeNode", width: float, depth: int) -> Flowable:
         indent = self.styles.list_indent
-        body = self.style("item")
-        items = [ListItem(self._restyle(item, "item", width - indent, depth + 1)) for item in node.children]
+        body = self.dressed(self.style("item"), self._block, align=False)
+        self._lists += 1  # a centred item would leave its bullet behind, on the left
+        try:
+            items = [
+                ListItem(self._restyle(item, "item", width - indent, depth + 1)) for item in node.children
+            ]
+        finally:
+            self._lists -= 1
         common = {
             "leftIndent": indent,
             "bulletFontName": body.fontName,
@@ -483,6 +593,7 @@ class _Builder:
     def _paragraph_of(
         self, nodes: list["SyntaxTreeNode"], style: ParagraphStyle, width: float
     ) -> list[Flowable]:
+        style = self.dressed(style, self._block, align=not self._lists)
         markup, inline = self.markup(nodes, style, width)
         if not markup.strip() or markup.strip() == "<br/>":
             return []
@@ -514,11 +625,31 @@ class _Builder:
                 tag, image = self.inline_picture(node, style, width)
                 out.append(tag)
                 images |= image
+            elif kind == "span":
+                tag, image = self.span(node, style, width)
+                out.append(tag)
+                images |= image
             else:
                 inner, image = self.markup(node.children, style, width)
                 images |= image
                 out.append(self._wrap(node, inner))
         return "".join(out), images
+
+    def span(self, node: "SyntaxTreeNode", style: ParagraphStyle, width: float) -> tuple[str, bool]:
+        """``[text]{.name}``: its text, in the colour and size its classes give."""
+        classes = self.classes(str(node.attrs.get("class", "")), f"[…]{{{node.attrs.get('class', '')}}}")
+        if any(each.alignment for each in classes):
+            names = node.attrs.get("class", "")
+            self.problems.append(MarkdownProblem("class", f"[…]{{.{names}}}", "an alignment acts on blocks"))
+            logger.warning("alignment of [...]{.%s} ignored: it acts on blocks, ::: around them", names)
+        inner_style = self.dressed(style, classes, align=False)
+        inner, images = self.markup(node.children, inner_style, width)
+        attributes = ""
+        if inner_style.textColor != style.textColor:
+            attributes += f' color="{_markup_color(inner_style.textColor)}"'
+        if inner_style.fontSize != style.fontSize:
+            attributes += f' size="{inner_style.fontSize:.3f}"'
+        return (f"<font{attributes}>{inner}</font>" if attributes else inner), images
 
     def _wrap(self, node: "SyntaxTreeNode", inner: str) -> str:
         kind = node.type
@@ -584,7 +715,8 @@ class _Builder:
             return InlineParagraph(self._alt(node), style)
         pdf, natural_width, natural_height = size
         scale = min(1.0, width / natural_width)
-        return _Figure(path, pdf, natural_width * scale, natural_height * scale, self.style("display"))
+        display = self.dressed(self.style("display"), self._block)
+        return _Figure(path, pdf, natural_width * scale, natural_height * scale, display)
 
     def inline_picture(self, node: "SyntaxTreeNode", style: ParagraphStyle, width: float) -> tuple[str, bool]:
         path, written = self._image_file(node)
@@ -611,7 +743,9 @@ class _Builder:
                 cells: list[Flowable] = []
                 lengths: list[float] = []
                 for cell in row.children:
-                    base = self.style("header" if cell.type == "th" else "cell")
+                    base = self.dressed(
+                        self.style("header" if cell.type == "th" else "cell"), self._block, align=False
+                    )
                     align = str(cell.attrs.get("style", "")).removeprefix("text-align:")
                     alignment = {"right": TA_RIGHT, "center": TA_CENTER}.get(align, TA_LEFT)
                     style = self.derive(base, alignment=alignment)
@@ -677,10 +811,12 @@ def _fit(natural: list[float], width: float) -> list[float]:
 
 
 class _Figure(Flowable):
-    """An image or a PDF page, centred on a line of its own; a label flush right on its baseline.
+    """An image or a PDF page on a line of its own; a label flush right on its baseline.
 
-    It takes the whole width it is offered and centres itself in it; offered
-    less room than it needs, label included, it is scaled down to fit.
+    It takes the whole width it is offered and places itself in it as its style
+    aligns -- centred unless a class says otherwise; a labelled one stays centred,
+    the right end being its label's. Offered less room than it needs, label
+    included, it is scaled down to fit.
     """
 
     def __init__(
@@ -719,6 +855,10 @@ class _Figure(Flowable):
     def draw(self) -> None:
         width, height = self.natural[0] * self.scale, self.natural[1] * self.scale
         x = (self.width - width) / 2
+        if not self.label and self.style.alignment == TA_LEFT:
+            x = 0.0
+        elif not self.label and self.style.alignment == TA_RIGHT:
+            x = self.width - width
         if self.pdf:
             from reportlab_layout.pdfpages import draw_pdf_page
 

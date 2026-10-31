@@ -886,7 +886,9 @@ formula $\frac{1}{2$: “$” never closed; “{” of “\frac” never closed
 The text is read by markdown-it-py in CommonMark, with tables, strikethrough
 and the `dollarmath` plugin of mdit-py-plugins, `$$…$$` allowed inside a line:
 the reading a site built on markdown-it gives it, so that the PDF and the page
-cut the text the same way. Raw HTML is not interpreted; it is written as text.
+cut the text the same way — and two common extensions, fenced blocks (`:::`)
+and bracketed spans (`[…]{…}`), for [classes](#classes-centred-grey-smaller).
+Raw HTML is not interpreted; it is written as text.
 
 | Markdown | On the page |
 | --- | --- |
@@ -903,6 +905,8 @@ cut the text the same way. Raw HTML is not interpreted; it is written as text.
 | a table | a table, its heading row in bold and repeated on every page, each column aligned as its `:---:` says |
 | `![alt](path)` | alone in its paragraph, an image centred and no wider than the text; inside a sentence, on the baseline |
 | `---` | a rule across the width |
+| `::: center` … `:::` | the blocks inside, [as the class says](#classes-centred-grey-smaller) |
+| `[text]{.gray}` | the words inside, as the class says |
 
 An image path is relative to `base`, the current folder by default. A one-page
 PDF is laid down as [vector drawing](#pdf-pages-as-vector-drawing), any other
@@ -966,7 +970,8 @@ whose file is missing or unreadable, or that is an address, is written as its
 alternative text in brackets. Neither stops the document: each is logged as a
 warning, on the `reportlab_layout.markdown` logger, and appended to
 `doc.markdown_problems`, a list of `MarkdownProblem(kind, source, message)` —
-`kind` is `"formula"` or `"image"`, `source` what the text says.
+`kind` is `"formula"`, `"image"` or `"class"` (a class name the text uses and
+the classes do not hold, ignored), `source` what the text says.
 
 ```python
 for problem in doc.markdown_problems:
@@ -993,11 +998,58 @@ name in the document's stylesheet:
 | `list_indent` | `18` | the indent of a list's text, in points, at every level |
 | `bullets` | `("•", "–", "◦")` | the bullets of each depth, in turn |
 | `quote_indent` | `14` | the indent of a quotation, in points |
+| `classes` | `MARKDOWN_CLASSES` | what each class name does; see below |
 
 `make_stylesheet()` defines the five names reportlab lacks — `Quote`,
 `List Item`, `Table Cell`, `Table Header`, `Display` — derived from `BodyText`.
 With a sheet of your own that lacks a name, the element falls back on a style
 derived from `paragraph`, so a text always sets.
+
+### Classes: centred, grey, smaller
+
+A class changes the look of a passage without leaving Markdown. It takes the
+syntax Pandoc, markdown-it-container and markdown-it-attrs share, rather than
+tags of this package's own, so that a text keeps meaning the same thing
+elsewhere: a fenced block around blocks, a bracketed span inside a line.
+
+```markdown
+::: center
+## Exercise 2
+:::
+
+The speed is fourteen metres per second [(rounded)]{.gray .small}.
+
+::: {.right .gray}
+Marked out of 4
+:::
+```
+
+| Class | Does |
+| --- | --- |
+| `center`, `right` | align the paragraphs, headings, images and formulas of the block |
+| `gray` | sets the text in grey, `#777777` |
+| `small` | sets it at 0.85 of its size, its formulas too |
+
+A block takes one class or several, `::: center` or `::: {.center .gray}`, and
+holds any blocks: paragraphs, lists, tables, other blocks. A block inside
+another needs a longer fence outside — `::::` around `:::`. Classes given
+together or nested add up: the inner alignment and colour win, the scales
+multiply. An alignment acts on paragraphs, headings, images and formulas, not
+on lists, tables and code, which keep theirs: a centred list item would leave
+its bullet behind on the left. Inside a line, `[…]{.center}` has nothing to
+align, and is reported. A name the classes do not hold is reported too, and the
+text set as if it were not there.
+
+Each class is a `MarkdownClass(alignment=…, color=…, scale=…)`, and
+`MarkdownStyles(classes=…)` says which names a text knows. Start from
+`MARKDOWN_CLASSES` to add classes or names of your own:
+
+```python
+from reportlab_layout import MARKDOWN_CLASSES, MarkdownClass, MarkdownStyles
+
+classes = {**MARKDOWN_CLASSES, "gris": MARKDOWN_CLASSES["gray"], "alert": MarkdownClass(color="#c62828")}
+doc.draw_markdown(text, styles=MarkdownStyles(classes=classes))
+```
 
 ### In a frame or in columns
 
@@ -1553,6 +1605,8 @@ when you want several figures at once, since it computes them from one lookup.
 | `markdown_flowables` | the flowables of a Markdown text, for a frame or columns | [In a frame or in columns](#in-a-frame-or-in-columns) |
 | `MarkdownStyles` | the style of each element of the text | [The style of each element](#the-style-of-each-element) |
 | `MarkdownProblem` | a formula refused or an image not found, set as text | [What could not be set](#what-could-not-be-set) |
+| `MarkdownClass` | what a class does: an alignment, a colour, a scale | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
+| `MARKDOWN_CLASSES` | the classes every text knows: `center`, `right`, `gray`, `small` | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
 | `MathFragment` | a formula of the text, as a composer receives it | [The formula composer](#the-formula-composer) |
 | `TypesetMath` | what a composer returns for each formula | [The formula composer](#the-formula-composer) |
 | `MathComposer` | the composer's type: fragments in, results out | [The formula composer](#the-formula-composer) |

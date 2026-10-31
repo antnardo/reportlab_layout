@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image as PILImage
 from pypdf import PdfReader
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.platypus import KeepTogether, ListFlowable, Table, XPreformatted
@@ -16,7 +17,9 @@ pytest.importorskip("markdown_it")
 pytest.importorskip("mdit_py_plugins")
 
 from reportlab_layout import (
+    MARKDOWN_CLASSES,
     InlineParagraph,
+    MarkdownClass,
     MarkdownStyles,
     MathFragment,
     PDFMaker,
@@ -370,3 +373,102 @@ def test_the_story_is_grouped_for_frames(stylesheet):
 
     story = keep_with_next(build("# H\n\ntext\n\nmore", stylesheet))
     assert isinstance(story[0], KeepTogether)
+
+
+# ----------------------------------------------------------------------
+# Classes
+# ----------------------------------------------------------------------
+GRAY = "#777777"
+
+
+def colour(style):
+    return "#{:02x}{:02x}{:02x}".format(*(round(255 * c) for c in style.textColor.rgb()))
+
+
+class TestClasses:
+    def test_a_block_centres_its_headings_and_paragraphs_not_the_items_of_a_list(self, stylesheet):
+        flowables = build("::: {.center .gray}\n# Title\n\nText.\n\n- item\n:::\n\nAfter.", stylesheet)
+        heading, paragraph, listing, after = flowables
+        assert heading.style.alignment == paragraph.style.alignment == TA_CENTER
+        item = listing._flowables[0]._flowables[0]
+        assert item.style.alignment != TA_CENTER  # its bullet would stay behind, on the left
+        assert colour(item.style) == GRAY
+        assert after.style.alignment != TA_CENTER
+
+    def test_the_pandoc_form_gives_several_classes(self, stylesheet):
+        [paragraph] = build("::: {.right .gray}\nText.\n:::", stylesheet)
+        assert paragraph.style.alignment == TA_RIGHT
+        assert colour(paragraph.style) == GRAY
+
+    def test_nested_blocks_add_up(self, stylesheet):
+        [paragraph] = build(":::: small\n::: small\nText.\n:::\n::::", stylesheet)
+        assert paragraph.style.fontSize == pytest.approx(10 * 0.85 * 0.85)
+        assert paragraph.style.leading == pytest.approx(stylesheet["BodyText"].leading * 0.85 * 0.85)
+
+    def test_a_span_greys_and_shrinks_its_words(self, stylesheet):
+        [paragraph] = build("one [two]{.gray .small} three", stylesheet)
+        assert f'<font color="{GRAY}" size="8.500">two</font>' in paragraph.text
+        assert paragraph.style.fontSize == 10
+
+    def test_a_formula_takes_the_size_its_class_gives(self, stylesheet, composer):
+        for text in ("::: small\nHence $x$.\n:::", "Hence [$x$]{.small}."):
+            [paragraph] = build(text, stylesheet, formulas=composer)
+            assert 'width="17.000" height="8.500" valign="-2.550"' in paragraph.text
+
+    def test_a_figure_follows_the_alignment_of_its_block(self, stylesheet, tmp_path):
+        PILImage.new("RGB", (40, 20)).save(tmp_path / "dot.png")
+        [figure] = build("::: right\n![dot](dot.png)\n:::", stylesheet, base=tmp_path)
+        assert isinstance(figure, _Figure)
+        figure.wrap(400, 100)
+        drawn = []
+        figure.canv = type("Spy", (), {"drawImage": lambda self, *args, **kw: drawn.append(args[1])})()
+        figure.draw()
+        assert drawn == [pytest.approx(360)]
+
+    def test_code_and_tables_take_colour_and_size_but_not_alignment(self, stylesheet):
+        code, table = build(
+            "::: {.center .small .gray}\n```\ncode\n```\n\n| a |\n|---|\n| b |\n:::", stylesheet
+        )
+        assert isinstance(code, XPreformatted) and isinstance(table, Table)
+        assert code.style.fontSize == pytest.approx(stylesheet["Code"].fontSize * 0.85)
+        cell = table._cellvalues[1][0]
+        assert cell.style.alignment != TA_CENTER
+        assert colour(cell.style) == GRAY
+
+    def test_an_unknown_class_is_reported_and_the_text_set_as_without_it(self, stylesheet):
+        problems = []
+        [paragraph] = build("::: centre\nText [word]{.grey}.\n:::", stylesheet, problems=problems)
+        assert [(p.kind, p.message) for p in problems] == [
+            ("class", "no class 'centre'"),
+            ("class", "no class 'grey'"),
+        ]
+        assert paragraph.style.alignment != TA_CENTER
+        assert "word" in paragraph.text and "font" not in paragraph.text
+
+    def test_an_alignment_inside_a_line_is_reported(self, stylesheet):
+        problems = []
+        [paragraph] = build("a [b]{.center} c", stylesheet, problems=problems)
+        assert [p.message for p in problems] == ["an alignment acts on blocks"]
+        assert paragraph.style.alignment != TA_CENTER
+
+    def test_names_of_your_own(self, stylesheet):
+        styles = MarkdownStyles(
+            classes={**MARKDOWN_CLASSES, "gris": MARKDOWN_CLASSES["gray"], "red": MarkdownClass(color="red")}
+        )
+        [paragraph] = build("[a]{.gris} [b]{.red}", stylesheet, styles=styles)
+        assert f'<font color="{GRAY}">a</font>' in paragraph.text
+        assert '<font color="#ff0000">b</font>' in paragraph.text
+
+    def test_a_fence_without_a_class_changes_nothing(self, stylesheet):
+        problems = []
+        [plain] = build("Text.", stylesheet)
+        [fenced] = build(":::\nText.\n:::", stylesheet, problems=problems)
+        assert fenced.style is plain.style or fenced.style.name == plain.style.name
+        assert problems == []
+
+    @pytest.mark.parametrize(
+        ("arguments", "message"), [({"alignment": "middle"}, "alignment"), ({"scale": 0}, "scale")]
+    )
+    def test_a_class_that_cannot_be_is_refused(self, arguments, message):
+        with pytest.raises(ValueError, match=message):
+            MarkdownClass(**arguments)

@@ -3,6 +3,19 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Classes in Markdown**: `::: center` … `:::` around blocks, `[a word]{.gray}`
+  inside a line — the fenced blocks and bracketed spans Pandoc,
+  markdown-it-container and markdown-it-attrs share. `center`, `right`, `gray`
+  and `small` come defined, in `MARKDOWN_CLASSES`; `MarkdownStyles(classes=…)`
+  maps names of your own to a `MarkdownClass` — an alignment, a colour, a scale.
+  Classes nest and add up; an alignment acts on paragraphs, headings, images and
+  formulas, not on lists, tables and code; a name the classes do not hold is
+  reported and ignored.
+
 ## [1.11.1] — 2026-10-22
 
 ### Fixed

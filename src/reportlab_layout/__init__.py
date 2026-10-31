@@ -30,6 +30,8 @@ from reportlab_layout.images import (
     load_image,
 )
 from reportlab_layout.markdown import (
+    MARKDOWN_CLASSES,
+    MarkdownClass,
     MarkdownProblem,
     MarkdownStyles,
     MathComposer,
@@ -58,6 +60,7 @@ from reportlab_layout.text import TextPainter
 __version__ = "1.11.1"
 
 __all__ = [
+    "MARKDOWN_CLASSES",
     "STYLES",
     "Box",
     "ColorLike",
@@ -68,6 +71,7 @@ __all__ = [
     "InlineParagraph",
     "Keep",
     "Margins",
+    "MarkdownClass",
     "MarkdownProblem",
     "MarkdownStyles",
     "MathComposer",
