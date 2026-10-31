@@ -116,8 +116,9 @@ doc.advance(30)                                              # the cursor follow
   composer you hand it, all at once: `TexFormulas`, built on texformules,
   typesets them with a real LaTeX and your preamble, in one compilation. A
   formula it refuses is written as it stands, and reported; the document goes
-  on. Classes centre a block, grey or shrink a word, in the syntax Pandoc
-  shares: `::: center` … `:::`, `[a word]{.gray}`. See
+  on. Classes centre or frame a block, colour, highlight or shrink a word,
+  start a new page, in the syntax Pandoc shares: `::: center` … `:::`,
+  `[a word]{.red}`. See
   [Markdown with formulas](https://github.com/antnardo/reportlab_layout/blob/main/docs/DOC.md#markdown-with-formulas).
 - **Two dependencies**, reportlab and Pillow; three extras for the rest, listed
   below. No headless browser, and no LaTeX unless you ask for it.

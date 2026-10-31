@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image as PILImage
 from pypdf import PdfReader
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.platypus import KeepTogether, ListFlowable, Table, XPreformatted
@@ -24,6 +24,7 @@ from reportlab_layout import (
     MathFragment,
     PDFMaker,
     markdown_flowables,
+    pdf_elements,
 )
 from reportlab_layout.markdown import _Figure, _fit, _Quote, math_fragments, parse_markdown
 
@@ -448,7 +449,7 @@ class TestClasses:
     def test_an_alignment_inside_a_line_is_reported(self, stylesheet):
         problems = []
         [paragraph] = build("a [b]{.center} c", stylesheet, problems=problems)
-        assert [p.message for p in problems] == ["an alignment acts on blocks"]
+        assert [p.message for p in problems] == ["an alignment, a box or a page break acts on blocks"]
         assert paragraph.style.alignment != TA_CENTER
 
     def test_names_of_your_own(self, stylesheet):
@@ -472,3 +473,91 @@ class TestClasses:
     def test_a_class_that_cannot_be_is_refused(self, arguments, message):
         with pytest.raises(ValueError, match=message):
             MarkdownClass(**arguments)
+
+
+class TestMoreClasses:
+    def test_every_class_that_comes_defined(self):
+        alignments = ["left", "center", "right", "justify"]
+        text = ["gray", "red", "green", "blue", "small", "large", "underline", "mark"]
+        assert sorted(MARKDOWN_CLASSES) == sorted([*alignments, *text, "box", "newpage"])
+
+    @pytest.mark.parametrize(("name", "alignment"), [("left", TA_LEFT), ("justify", TA_JUSTIFY)])
+    def test_the_other_alignments(self, stylesheet, name, alignment):
+        [paragraph] = build(f"::: {name}\nText.\n:::", stylesheet)
+        assert paragraph.style.alignment == alignment
+
+    @pytest.mark.parametrize(
+        ("name", "value"), [("red", "#c62828"), ("green", "#2e7d32"), ("blue", "#1565c0")]
+    )
+    def test_the_colours_of_a_correction(self, stylesheet, name, value):
+        [paragraph] = build(f"[word]{{.{name}}}", stylesheet)
+        assert f'<font color="{value}">word</font>' in paragraph.text
+
+    def test_large_is_the_reverse_of_small(self, stylesheet):
+        [paragraph] = build("::: large\nText.\n:::", stylesheet)
+        assert paragraph.style.fontSize == pytest.approx(12)
+
+    def test_underline_and_mark_in_a_line_and_around_a_block(self, stylesheet):
+        [inline] = build("a [b]{.underline} [c]{.mark}", stylesheet)
+        assert "<u>b</u>" in inline.text
+        assert '<font backColor="#fff176">c</font>' in inline.text
+        [block] = build("::: {.underline .mark}\nAll of it.\n:::", stylesheet)
+        assert block.text == '<u><font backColor="#fff176">All of it.</font></u>'
+
+    @pytest.mark.parametrize("written", ['[w]{color="#c62828"}', "[w]{color=red}"])
+    def test_a_colour_given_once_without_a_class(self, stylesheet, written):
+        """In a line, a ``#`` colour is quoted: markdown-it-attrs reads ``{color=#c62828}`` as text."""
+        [paragraph] = build(written, stylesheet)
+        assert '<font color="#' in paragraph.text and ">w</font>" in paragraph.text
+
+    def test_a_block_takes_a_colour_too(self, stylesheet):
+        [paragraph] = build("::: {.right color=#2e7d32}\nText.\n:::", stylesheet)
+        assert (paragraph.style.alignment, colour(paragraph.style)) == (TA_RIGHT, "#2e7d32")
+
+    def test_a_colour_or_an_attribute_that_is_not_is_reported(self, stylesheet):
+        problems = []
+        build("[a]{color=nocolour} [b]{width=3}", stylesheet, problems=problems)
+        assert [p.message for p in problems] == ["no colour 'nocolour'", "no attribute 'width'"]
+
+    def test_a_class_with_a_colour_that_is_not_is_refused(self):
+        with pytest.raises(ValueError):
+            MarkdownClass(color="nocolour")
+
+    def test_a_box_frames_its_blocks(self, stylesheet, out):
+        flowables = build("Before.\n\n::: box\nInside, framed.\n:::\n\nAfter.", stylesheet)
+        assert [type(f).__name__ for f in flowables] == ["InlineParagraph", "_Box", "InlineParagraph"]
+        with PDFMaker(out, stylesheet=stylesheet) as doc:
+            doc.draw_markdown("::: box\nInside, framed.\n:::")
+        elements = pdf_elements(out)
+        [frame] = [e for e in elements if e.kind == "path"]
+        glyphs = [e for e in elements if e.kind == "text"]
+        assert all(frame.box[0] < g.box[0] and g.box[2] < frame.box[2] for g in glyphs)
+        assert all(frame.box[1] < g.box[1] and g.box[3] < frame.box[3] for g in glyphs)
+
+    def test_a_box_taller_than_the_page_splits_and_frames_each_part(self, stylesheet, out):
+        text = "::: box\n" + "\n\n".join(f"Paragraph {n}." for n in range(80)) + "\n:::"
+        with PDFMaker(out, stylesheet=stylesheet) as doc:
+            doc.draw_markdown(text)
+        pages = len(PdfReader(out).pages)
+        assert pages >= 2
+        for index in range(pages):
+            assert sum(e.kind == "path" for e in pdf_elements(out, index)) == 1
+
+    def test_newpage_starts_its_block_on_a_new_page_never_a_blank_one(self, stylesheet, out):
+        with PDFMaker(out, stylesheet=stylesheet) as doc:
+            doc.draw_markdown("::: newpage\nFirst.\n:::\n\nStill first.\n\n::: newpage\n:::\n\nSecond.")
+        texts = ["".join(e.text for e in pdf_elements(out, index) if e.kind == "text") for index in range(2)]
+        assert len(PdfReader(out).pages) == 2
+        assert texts == ["First.Still first.", "Second."]
+
+    def test_newpage_is_the_page_break_a_document_template_knows(self, stylesheet, tmp_path):
+        from reportlab.platypus import SimpleDocTemplate
+
+        path = tmp_path / "template.pdf"
+        SimpleDocTemplate(str(path)).build(build("One.\n\n::: newpage\nTwo.\n:::", stylesheet))
+        assert len(PdfReader(path).pages) == 2
+
+    def test_a_block_class_inside_a_line_is_reported(self, stylesheet):
+        problems = []
+        build("a [b]{.box} [c]{.newpage}", stylesheet, problems=problems)
+        assert len(problems) == 2 and all("acts on blocks" in p.message for p in problems)

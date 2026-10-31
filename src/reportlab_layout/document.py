@@ -837,6 +837,12 @@ class PDFMaker:
             problems=self.markdown_problems,
         )
         for flowable in keep_with_next(story):
+            if isinstance(flowable, ActionFlowable) and tuple(getattr(flowable, "action", ()))[:1] == (
+                "pageBreak",
+            ):
+                if self.cursor.depth > self.cursor.top + 1e-6:  # never a blank page
+                    self.new_page()
+                continue
             self.draw(flowable, page_break=True, show_boundary=show_boundary)
         if self.page != start_page:
             top = self.geometry.depth_to_y(self.cursor.top)

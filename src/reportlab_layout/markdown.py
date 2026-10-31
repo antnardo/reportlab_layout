@@ -14,9 +14,12 @@ tags of this package's own, so that a text keeps meaning the same thing elsewher
 a fenced block, ``::: center`` … ``:::`` (or ``::: {.center .gray}``), around any
 blocks; a bracketed span, ``[a word]{.gray}``, inside a line. Each name is looked up
 in :attr:`MarkdownStyles.classes`, which maps it to a :class:`MarkdownClass` -- an
-alignment, a colour, a scale; ``center``, ``right``, ``gray`` and ``small`` come
-defined. A name it does not hold is reported and ignored: the text is set as if the
-class were not there.
+alignment, colours, a scale, an underline, a frame, a page break; fourteen come
+defined (:data:`MARKDOWN_CLASSES`), and ``{color=#c62828}`` sets a colour once,
+without a class. A name it does not hold is reported and ignored: the text is set
+as if the class were not there. A page break, ``::: newpage``, is the action a
+reportlab document template knows, ``pageBreak``, and ``PDFMaker.draw_markdown``
+turns the page for it -- unless the page is still empty.
 
 **The formulas are not typeset here.** No renderer that does without LaTeX knows
 what a real preamble defines, and this package depends on no TeX. A *formula
@@ -53,6 +56,7 @@ from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle, StyleSheet1
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Flowable, ListFlowable, ListItem, Table, TableStyle, XPreformatted
+from reportlab.platypus.doctemplate import ActionFlowable
 from reportlab.platypus.flowables import HRFlowable
 
 from reportlab_layout.colors import ColorLike, to_color
@@ -135,33 +139,63 @@ _ALIGNMENTS = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify
 class MarkdownClass:
     """What a class does to the text it is given to: ``::: name`` blocks, or ``[text]{.name}``.
 
-    ``alignment`` -- ``"left"``, ``"center"``, ``"right"`` or ``"justify"`` -- acts on
-    the paragraphs, headings, images and formulas of a block; not on lists, tables
-    and code, which keep their own; inside a line it has nothing to align, and is
-    reported. ``color`` is the colour of the text.
-    ``scale`` multiplies the type size and the leading, and the size of the
-    formulas set in them. Classes given together, or nested, add up: the inner
-    alignment and colour win, the scales multiply.
+    On the text, in a block or a line:
+
+    - ``color``, the colour of the text; ``highlight``, a colour behind it;
+    - ``scale``, a factor on the type size, the leading and the formulas;
+    - ``underline``.
+
+    On a block only -- inside a line they are reported and ignored:
+
+    - ``alignment``, ``"left"``, ``"center"``, ``"right"`` or ``"justify"``, of its
+      paragraphs, headings, images and formulas, not of its lists, tables and
+      code, which keep their own;
+    - ``box``, the colour of a frame drawn around the block;
+    - ``page_break``, to start the block on a new page.
+
+    Classes given together, or nested, add up: the inner alignment and colours
+    win, the scales multiply. A frame and a page break belong to the block that
+    asks for them, not to the blocks inside it.
     """
 
     alignment: str | None = None
     color: ColorLike | None = None
     scale: float = 1.0
+    underline: bool = False
+    highlight: ColorLike | None = None
+    box: ColorLike | None = None
+    page_break: bool = False
 
     def __post_init__(self) -> None:
         if self.alignment is not None and self.alignment not in _ALIGNMENTS:
             raise ValueError(f"alignment must be one of {sorted(_ALIGNMENTS)}, got {self.alignment!r}")
         if self.scale <= 0:
             raise ValueError(f"scale must be positive, got {self.scale}")
+        for colour in (self.color, self.highlight, self.box):
+            to_color(colour)  # a colour that is none is refused now, not in the middle of a text
+
+    @property
+    def for_blocks_only(self) -> bool:
+        return self.alignment is not None or self.box is not None or self.page_break
 
 
 #: The classes every text knows; :attr:`MarkdownStyles.classes` starts from them.
 MARKDOWN_CLASSES: Mapping[str, MarkdownClass] = MappingProxyType(
     {
+        "left": MarkdownClass(alignment="left"),
         "center": MarkdownClass(alignment="center"),
         "right": MarkdownClass(alignment="right"),
+        "justify": MarkdownClass(alignment="justify"),
         "gray": MarkdownClass(color="#777777"),
+        "red": MarkdownClass(color="#c62828"),
+        "green": MarkdownClass(color="#2e7d32"),
+        "blue": MarkdownClass(color="#1565c0"),
         "small": MarkdownClass(scale=0.85),
+        "large": MarkdownClass(scale=1.2),
+        "underline": MarkdownClass(underline=True),
+        "mark": MarkdownClass(highlight="#fff176"),
+        "box": MarkdownClass(box="#999999"),
+        "newpage": MarkdownClass(page_break=True),
     }
 )
 
@@ -221,6 +255,8 @@ class MarkdownStyles:
     #: The names ``::: name`` and ``[text]{.name}`` may use; add your own, or rename,
     #: with ``{**MARKDOWN_CLASSES, "gris": MARKDOWN_CLASSES["gray"]}``.
     classes: Mapping[str, MarkdownClass] = field(default_factory=lambda: dict(MARKDOWN_CLASSES))
+    #: Between the frame of a ``box`` and what it holds, in points.
+    box_padding: float = 6
 
 
 def _parser() -> Any:
@@ -380,19 +416,45 @@ class _Builder:
             self._derived[key] = ParagraphStyle(f"{style.name}~{len(self._derived)}", parent=style, **changes)
         return self._derived[key]
 
-    def classes(self, names: str, source: str) -> list[MarkdownClass]:
-        """The classes ``names`` gives -- ``center gray``, ``{.center .gray}`` -- the unknown reported."""
+    def classes(
+        self, words: str, source: str, attributes: Mapping[str, Any] | None = None
+    ) -> list[MarkdownClass]:
+        """The classes ``words`` names -- ``center``, ``{.center color=#c62828}`` -- the unknown reported.
+
+        ``attributes`` are those markdown-it already read, a span's; a block's
+        come in ``words``. Of the attributes, only ``color`` sets anything; an
+        identifier, ``#name``, is let be.
+        """
         found: list[MarkdownClass] = []
-        for word in names.replace("{", " ").replace("}", " ").split():
-            if word.startswith("#") or "=" in word:
-                continue  # an identifier or an attribute: nothing to set
+        given = dict(attributes or {})
+        names = str(given.pop("class", ""))
+        text = words.replace("{", " ").replace("}", " ")
+        for key, value in re.findall(r"""([\w-]+)=("[^"]*"|'[^']*'|\S+)""", text):
+            given[key] = value.strip("\"'")
+        text = re.sub(r"""[\w-]+=("[^"]*"|'[^']*'|\S+)""", " ", text)
+        for word in (text + " " + names).split():
+            if word.startswith("#"):
+                continue
             name = word.lstrip(".")
             if name in self.styles.classes:
                 found.append(self.styles.classes[name])
             else:
-                self.problems.append(MarkdownProblem("class", source, f"no class {name!r}"))
-                logger.warning("class %r of %s ignored: the classes do not hold it", name, source)
+                self._unknown(source, f"no class {name!r}")
+        for key, value in given.items():
+            if key == "id":
+                continue
+            if key != "color":
+                self._unknown(source, f"no attribute {key!r}")
+                continue
+            try:
+                found.append(MarkdownClass(color=value))
+            except (ValueError, AttributeError):
+                self._unknown(source, f"no colour {value!r}")
         return found
+
+    def _unknown(self, source: str, message: str) -> None:
+        self.problems.append(MarkdownProblem("class", source, message))
+        logger.warning("%s ignored: %s", source, message)
 
     def dressed(
         self, style: ParagraphStyle, classes: Sequence[MarkdownClass], *, align: bool = True
@@ -413,6 +475,17 @@ class _Builder:
             changes["fontSize"] = style.fontSize * scale
             changes["leading"] = style.leading * scale
         return self.derive(style, **changes) if changes else style
+
+    def decorated(self, markup: str, classes: Sequence[MarkdownClass]) -> str:
+        """``markup`` underlined and highlighted as ``classes`` say."""
+        highlight = None
+        underline = False
+        for each in classes:
+            highlight = each.highlight if each.highlight is not None else highlight
+            underline |= each.underline
+        if highlight is not None:
+            markup = f'<font backColor="{_markup_color(highlight)}">{markup}</font>'
+        return f"<u>{markup}</u>" if underline else markup
 
     def warn(self, kind: str, source: str, message: str) -> None:
         self.problems.append(MarkdownProblem(kind, source, message))
@@ -506,12 +579,20 @@ class _Builder:
             code = self.dressed(self.style("code"), self._block, align=False)
             return [XPreformatted(escape(node.content.rstrip("\n")), code)]
         if kind.startswith("container_"):
+            given = self.classes(node.info, f"::: {node.info.strip()}")
+            frame = next((each.box for each in reversed(given) if each.box is not None), None)
+            inset = 2 * (self.styles.box_padding + self.styles.rule_width) if frame is not None else 0.0
             mark = len(self._block)
-            self._block += self.classes(node.info, f"::: {node.info.strip()}")
+            self._block += given
             try:
-                return self.blocks(node.children, width, depth)
+                story = self.blocks(node.children, width - inset, depth)
             finally:
                 del self._block[mark:]
+            if frame is not None and story:
+                story = [_Box(story, to_color(frame), self.styles.rule_width, self.styles.box_padding)]
+            if any(each.page_break for each in given):
+                story = [_page_break(), *story]
+            return story
         if kind in ("bullet_list", "ordered_list"):
             return [self.listing(node, width, depth)]
         if kind == "blockquote":
@@ -597,6 +678,7 @@ class _Builder:
         markup, inline = self.markup(nodes, style, width)
         if not markup.strip() or markup.strip() == "<br/>":
             return []
+        markup = self.decorated(markup.strip(), self._block)
         if inline:
             style = self.derive(style, autoLeading="max")
         return [InlineParagraph(markup.strip(), style)]
@@ -636,12 +718,13 @@ class _Builder:
         return "".join(out), images
 
     def span(self, node: "SyntaxTreeNode", style: ParagraphStyle, width: float) -> tuple[str, bool]:
-        """``[text]{.name}``: its text, in the colour and size its classes give."""
-        classes = self.classes(str(node.attrs.get("class", "")), f"[…]{{{node.attrs.get('class', '')}}}")
-        if any(each.alignment for each in classes):
-            names = node.attrs.get("class", "")
-            self.problems.append(MarkdownProblem("class", f"[…]{{.{names}}}", "an alignment acts on blocks"))
-            logger.warning("alignment of [...]{.%s} ignored: it acts on blocks, ::: around them", names)
+        """``[text]{.name}``: its text in the colour, size and decoration its classes give."""
+        source = (
+            "[…]{" + " ".join(f"{k}={v}" if k != "class" else f".{v}" for k, v in node.attrs.items()) + "}"
+        )
+        classes = self.classes("", source, node.attrs)
+        if any(each.for_blocks_only for each in classes):
+            self._unknown(source, "an alignment, a box or a page break acts on blocks")
         inner_style = self.dressed(style, classes, align=False)
         inner, images = self.markup(node.children, inner_style, width)
         attributes = ""
@@ -649,7 +732,8 @@ class _Builder:
             attributes += f' color="{_markup_color(inner_style.textColor)}"'
         if inner_style.fontSize != style.fontSize:
             attributes += f' size="{inner_style.fontSize:.3f}"'
-        return (f"<font{attributes}>{inner}</font>" if attributes else inner), images
+        inner = f"<font{attributes}>{inner}</font>" if attributes else inner
+        return self.decorated(inner, classes), images
 
     def _wrap(self, node: "SyntaxTreeNode", inner: str) -> str:
         kind = node.type
@@ -753,7 +837,9 @@ class _Builder:
                     markup, inline = self.markup(nodes, style, width)
                     if inline:
                         style = self.derive(style, autoLeading="max")
-                    paragraph = InlineParagraph(markup, style)
+                    paragraph = InlineParagraph(
+                        self.decorated(markup, self._block) if markup else markup, style
+                    )
                     cells.append(paragraph)
                     lengths.append(_natural_width(paragraph))
                 rows.append(cells)
@@ -778,6 +864,11 @@ class _Builder:
         table.setStyle(TableStyle(commands))
         table.spaceBefore = table.spaceAfter = 6
         return table
+
+
+def _page_break() -> Flowable:
+    """A page break as a document template knows it, and as ``PDFMaker.draw_markdown`` reads it."""
+    return ActionFlowable(("pageBreak",))
 
 
 def _markup_color(value: ColorLike | None) -> str | None:
@@ -907,4 +998,47 @@ class _Quote(Flowable):
         canvas.setLineWidth(2 * self.thickness)
         x = self.indent / 3
         canvas.line(x, 0, x, self.height)
+        canvas.restoreState()
+
+
+class _Box(Flowable):
+    """Blocks in a frame, a padding between: a box, which splits between its blocks, each part framed."""
+
+    def __init__(self, content: list[Flowable], color: Any, thickness: float, padding: float) -> None:
+        super().__init__()
+        self.content = content
+        self.color, self.thickness, self.padding = color, thickness, padding
+        self.spaceBefore = max(6.0, content[0].getSpaceBefore()) if content else 6.0
+        self.spaceAfter = max(6.0, content[-1].getSpaceAfter()) if content else 6.0
+        self._placements: Sequence[Any] = ()
+
+    @property
+    def _inset(self) -> float:
+        return self.padding + self.thickness
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        packing = pack_columns(self.canv, self.content, available_width - 2 * self._inset, _UNBOUNDED, 1)
+        self._placements = packing.placements
+        self.width, self.height = available_width, packing.height + 2 * self._inset
+        return self.width, self.height
+
+    def split(self, available_width: float, available_height: float) -> list[Flowable]:
+        inner = available_height - 2 * self._inset
+        if inner <= _FUZZ:
+            return []
+        packing = pack_columns(self.canv, self.content, available_width - 2 * self._inset, inner, 1)
+        if not packing.placements or not packing.rest:
+            return []
+        frame = (self.color, self.thickness, self.padding)
+        return [_Box([p.flowable for p in packing.placements], *frame), _Box(list(packing.rest), *frame)]
+
+    def draw(self) -> None:
+        canvas = self.canv
+        for placement in self._placements:
+            placement.flowable.drawOn(canvas, self._inset, self.height - self._inset - placement.bottom)
+        canvas.saveState()
+        canvas.setStrokeColor(self.color)
+        canvas.setLineWidth(self.thickness)
+        half = self.thickness / 2
+        canvas.rect(half, half, self.width - self.thickness, self.height - self.thickness, stroke=1, fill=0)
         canvas.restoreState()

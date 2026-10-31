@@ -999,6 +999,7 @@ name in the document's stylesheet:
 | `bullets` | `("•", "–", "◦")` | the bullets of each depth, in turn |
 | `quote_indent` | `14` | the indent of a quotation, in points |
 | `classes` | `MARKDOWN_CLASSES` | what each class name does; see below |
+| `box_padding` | `6` | between the frame of a `box` and what it holds, in points |
 
 `make_stylesheet()` defines the five names reportlab lacks — `Quote`,
 `List Item`, `Table Cell`, `Table Header`, `Display` — derived from `BodyText`.
@@ -1026,21 +1027,36 @@ Marked out of 4
 
 | Class | Does |
 | --- | --- |
-| `center`, `right` | align the paragraphs, headings, images and formulas of the block |
-| `gray` | sets the text in grey, `#777777` |
-| `small` | sets it at 0.85 of its size, its formulas too |
+| `left`, `center`, `right`, `justify` | align the paragraphs, headings, images and formulas of a block |
+| `gray`, `red`, `green`, `blue` | set the text in `#777777`, `#c62828`, `#2e7d32`, `#1565c0` |
+| `small`, `large` | set it at 0.85 or 1.2 times its size, its formulas too |
+| `underline` | underlines it |
+| `mark` | highlights it, on `#fff176` |
+| `box` | frames a block, `box_padding` inside the frame; a box taller than the page splits between its blocks, each part framed |
+| `newpage` | starts a block on a new page — `::: newpage` then `:::` alone is a page break |
+
+`{color=…}` sets a colour once, without a class: `::: {.right color=#2e7d32}`
+around a block, `[a word]{color=red}` or `[a word]{color="#2e7d32"}` in a line —
+there, a colour that starts with `#` takes quotes, which markdown-it-attrs
+needs. A page break is the action a reportlab document template knows,
+`pageBreak`: `draw_markdown` turns the page for it, unless the page is still
+empty, and a `SimpleDocTemplate` given the flowables of `markdown_flowables`
+turns it too.
 
 A block takes one class or several, `::: center` or `::: {.center .gray}`, and
 holds any blocks: paragraphs, lists, tables, other blocks. A block inside
 another needs a longer fence outside — `::::` around `:::`. Classes given
 together or nested add up: the inner alignment and colour win, the scales
-multiply. An alignment acts on paragraphs, headings, images and formulas, not
-on lists, tables and code, which keep theirs: a centred list item would leave
-its bullet behind on the left. Inside a line, `[…]{.center}` has nothing to
-align, and is reported. A name the classes do not hold is reported too, and the
-text set as if it were not there.
+multiply; a frame and a page break belong to the block that asks for them. An
+alignment acts on paragraphs, headings, images and formulas, not on lists,
+tables and code, which keep theirs: a centred list item would leave its bullet
+behind on the left. Inside a line, an alignment, a box or a page break has
+nothing to act on, and is reported. A name the classes do not hold is reported
+too, and the text set as if it were not there; so is a colour that is not one,
+or an attribute other than `color`.
 
-Each class is a `MarkdownClass(alignment=…, color=…, scale=…)`, and
+Each class is a `MarkdownClass` — `alignment`, `color`, `scale`, `underline`,
+`highlight`, `box` (the colour of a frame), `page_break` — and
 `MarkdownStyles(classes=…)` says which names a text knows. Start from
 `MARKDOWN_CLASSES` to add classes or names of your own:
 
@@ -1605,8 +1621,8 @@ when you want several figures at once, since it computes them from one lookup.
 | `markdown_flowables` | the flowables of a Markdown text, for a frame or columns | [In a frame or in columns](#in-a-frame-or-in-columns) |
 | `MarkdownStyles` | the style of each element of the text | [The style of each element](#the-style-of-each-element) |
 | `MarkdownProblem` | a formula refused or an image not found, set as text | [What could not be set](#what-could-not-be-set) |
-| `MarkdownClass` | what a class does: an alignment, a colour, a scale | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
-| `MARKDOWN_CLASSES` | the classes every text knows: `center`, `right`, `gray`, `small` | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
+| `MarkdownClass` | what a class does: alignment, colours, scale, underline, frame, page break | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
+| `MARKDOWN_CLASSES` | the fourteen classes every text knows | [Classes: centred, grey, smaller](#classes-centred-grey-smaller) |
 | `MathFragment` | a formula of the text, as a composer receives it | [The formula composer](#the-formula-composer) |
 | `TypesetMath` | what a composer returns for each formula | [The formula composer](#the-formula-composer) |
 | `MathComposer` | the composer's type: fragments in, results out | [The formula composer](#the-formula-composer) |

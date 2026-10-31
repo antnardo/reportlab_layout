@@ -7,14 +7,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ### Added
 
-- **Classes in Markdown**: `::: center` … `:::` around blocks, `[a word]{.gray}`
+- **Classes in Markdown**: `::: center` … `:::` around blocks, `[a word]{.red}`
   inside a line — the fenced blocks and bracketed spans Pandoc,
-  markdown-it-container and markdown-it-attrs share. `center`, `right`, `gray`
-  and `small` come defined, in `MARKDOWN_CLASSES`; `MarkdownStyles(classes=…)`
-  maps names of your own to a `MarkdownClass` — an alignment, a colour, a scale.
-  Classes nest and add up; an alignment acts on paragraphs, headings, images and
-  formulas, not on lists, tables and code; a name the classes do not hold is
-  reported and ignored.
+  markdown-it-container and markdown-it-attrs share. Fourteen come defined, in
+  `MARKDOWN_CLASSES`: `left`, `center`, `right`, `justify`; `gray`, `red`,
+  `green`, `blue`; `small`, `large`; `underline`, `mark`; `box`, a frame that
+  splits with its block across pages; `newpage`. `{color=…}` sets a colour once.
+  `MarkdownStyles(classes=…)` maps names of your own to a `MarkdownClass`, and
+  `box_padding` sets the inside of a frame. Classes nest and add up; an
+  alignment acts on paragraphs, headings, images and formulas, not on lists,
+  tables and code; a name the classes do not hold is reported and ignored.
+- A displayed image follows the alignment of its style, centred by default.
 
 ## [1.11.1] — 2026-10-22
 
