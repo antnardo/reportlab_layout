@@ -14,6 +14,12 @@ exact point.
         doc.draw_table([["Subject", "Mark"], ["Maths", "17"]])
 """
 
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib.colors import Color
+from reportlab.lib.styles import ParagraphStyle, StyleSheet1
+from reportlab.lib.units import cm, inch, mm
+from reportlab.platypus import Flowable
+
 from reportlab_layout.boxes import Box
 from reportlab_layout.colors import ColorLike, to_color
 from reportlab_layout.columns import Packing, Placement, balanced_height, keep_with_next, pack_columns
@@ -50,6 +56,7 @@ from reportlab_layout.metrics import (
     string_width,
 )
 from reportlab_layout.numbering import NumberedCanvas
+from reportlab_layout.painted import PaintedFlowable
 from reportlab_layout.paragraphs import InlineParagraph, TaggedParagraph
 from reportlab_layout.pdfcontent import Keep, PdfElement
 from reportlab_layout.pdfpages import PdfPage, PdfSource, draw_pdf_page, inline_pdf, pdf_elements, pdf_page
@@ -66,8 +73,11 @@ __all__ = [
     "QR_LEVELS",
     "STYLES",
     "Box",
+    "Color",
     "ColorLike",
     "Cursor",
+    "Drawing",
+    "Flowable",
     "FrameWriter",
     "ImageLike",
     "ImageSpec",
@@ -84,12 +94,15 @@ __all__ = [
     "PDFMaker",
     "Packing",
     "PageGeometry",
+    "PaintedFlowable",
+    "ParagraphStyle",
     "PdfElement",
     "PdfPage",
     "PdfSource",
     "Placement",
     "ShapePainter",
     "StyleLike",
+    "StyleSheet1",
     "TaggedParagraph",
     "TextMetrics",
     "TextPainter",
@@ -100,17 +113,20 @@ __all__ = [
     "balanced_height",
     "baseline_offset",
     "cap_height",
+    "cm",
     "draw_pdf_page",
     "font_ascent",
     "font_descent",
     "font_height",
     "image_spec",
+    "inch",
     "inline_image",
     "inline_pdf",
     "keep_with_next",
     "load_image",
     "make_stylesheet",
     "markdown_flowables",
+    "mm",
     "pack_columns",
     "pdf_elements",
     "pdf_page",
