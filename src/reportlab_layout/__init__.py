@@ -53,6 +53,7 @@ from reportlab_layout.numbering import NumberedCanvas
 from reportlab_layout.paragraphs import InlineParagraph, TaggedParagraph
 from reportlab_layout.pdfcontent import Keep, PdfElement
 from reportlab_layout.pdfpages import PdfPage, PdfSource, draw_pdf_page, inline_pdf, pdf_elements, pdf_page
+from reportlab_layout.qr import QR_LEVELS, qr_drawing, qr_matrix
 from reportlab_layout.redaction import redact_pdf
 from reportlab_layout.shapes import ShapePainter
 from reportlab_layout.styles import STYLES, StyleLike, add_style, make_stylesheet, resolve_style
@@ -62,6 +63,7 @@ __version__ = "1.12.0"
 
 __all__ = [
     "MARKDOWN_CLASSES",
+    "QR_LEVELS",
     "STYLES",
     "Box",
     "ColorLike",
@@ -112,6 +114,8 @@ __all__ = [
     "pack_columns",
     "pdf_elements",
     "pdf_page",
+    "qr_drawing",
+    "qr_matrix",
     "redact_pdf",
     "register_font_family",
     "resolve_pagesize",
