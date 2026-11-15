@@ -126,3 +126,41 @@ def test_each_type_handed_on_appears_in_a_public_signature(name):
 
 def test_the_units_handed_on_stand_for_the_unit_of_a_document():
     assert inspect.signature(PDFMaker.__init__).parameters["unit"].default == reportlab_layout.mm
+
+
+class Row(PaintedFlowable):
+    """A label and a paragraph beside it, the paragraph placed by the row."""
+
+    def __init__(self, paragraph):
+        super().__init__()
+        self.paragraph = paragraph
+
+    def wrap(self, available_width, available_height):
+        self.width = available_width
+        _, self.height = self.paragraph.wrap(available_width - 100, available_height)
+        return self.width, self.height
+
+    def paint(self):
+        self.text.draw("Label", 0, self.height - 10)
+        self.box = self.place(self.paragraph, 100, 0, self.width - 100)
+
+
+def test_place_draws_a_flowable_inside_and_returns_its_box(out, stylesheet):
+    from reportlab.platypus import Paragraph
+
+    row = Row(Paragraph("word " * 60, stylesheet["Normal"]))
+    with PDFMaker(out) as doc:
+        outer = doc.draw(row)
+    assert row.box.x == 100
+    assert row.box.height == pytest.approx(outer.height)
+    text = PdfReader(str(out)).pages[0].extract_text()
+    assert "Label" in text and "word word" in text
+
+
+def test_to_color_is_typed_color_for_a_colour():
+    from typing import get_type_hints
+
+    import reportlab_layout.colors as colors
+
+    overloads = __import__("typing").get_overloads(colors.to_color)
+    assert [get_type_hints(f)["return"] for f in overloads] == [type(None), reportlab_layout.Color]

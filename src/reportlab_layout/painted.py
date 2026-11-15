@@ -8,7 +8,8 @@ hand on ``0.35 × size``, a fill colour or a text render mode left behind for
 the next call, ``drawImage`` and its readers.
 
 :class:`PaintedFlowable` hands ``paint`` the same painters a document has --
-``self.text``, ``self.shapes`` and :meth:`~PaintedFlowable.image` -- bound to
+``self.text``, ``self.shapes``, :meth:`~PaintedFlowable.image` and
+:meth:`~PaintedFlowable.place` for a flowable inside it -- bound to
 the flowable's own canvas, its origin at the flowable's lower-left corner.
 Each call isolates its state and returns its :class:`~reportlab_layout.Box`,
 as on a page. Sizing stays reportlab's: ``wrap`` is written as for any
@@ -48,6 +49,18 @@ class PaintedFlowable(Flowable):
     def paint(self) -> None:
         """Draw the flowable, in its own coordinates; override it."""
         raise NotImplementedError(f"{type(self).__name__} has to define paint()")
+
+    def place(self, flowable: Flowable, x: float, y: float, width: float, height: float = 1e6) -> Box:
+        """Wrap another flowable -- a paragraph in a row -- and draw it, its lower-left corner at ``(x, y)``.
+
+        ``width`` and ``height`` are the room it wraps in, and the box it takes
+        comes back. Measuring it beforehand, in ``wrap``, is the flowable's own
+        ``wrap(width, height)``: wrapping again here at the same width gives the
+        same size.
+        """
+        used_width, used_height = flowable.wrapOn(self.canv, width, height)
+        flowable.drawOn(self.canv, x, y)
+        return Box(x, y, used_width, used_height)
 
     def image(
         self,

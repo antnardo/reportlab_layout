@@ -620,7 +620,9 @@ accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
 reportlab `Color`. An opacity comes as the fourth number of a tuple, or as
 `"#rrggbbaa"`, and makes what is painted with it transparent — a highlight over
 text, for instance; `"#rgb"` and `"#rgba"` are read as in CSS. `to_color` does
-the conversion, so naming a colour needs neither `HexColor` nor `Color`.
+the conversion, so naming a colour needs neither `HexColor` nor `Color`. Given anything but
+`None` it returns a `Color`, and says so to a type checker: a colour constant
+needs no `assert`.
 `radius` is clamped to half the shorter side.
 
 `draw_ellipse` and `draw_circle` take a **centre** and radii, not a bounding box:
@@ -1292,7 +1294,10 @@ doc.draw(MarkBar("Mechanics", 0.7, "14 / 20"))
 In `paint`, `self.text` is a `TextPainter`, `self.shapes` a `ShapePainter`, and
 `self.image(source, x, y, width=…)` draws an image — a path, bytes, a Pillow
 image, transparency kept — all in the flowable's own coordinates, from its
-lower-left corner. So the anchors work inside a flowable as on a page: a label
+lower-left corner. `self.place(flowable, x, y, width)` wraps another flowable
+in `width` — a paragraph beside a label, in a row — draws it with its lower-left
+corner at `(x, y)` and returns its box. So the anchors work inside a flowable as
+on a page: a label
 centred on its capitals with `valign="cap"` rather than on `0.35 × size`, a
 faux bold with `outline=`. Each call isolates its state: a fill colour or a
 text render mode set for one stamp does not carry over to the next drawing.

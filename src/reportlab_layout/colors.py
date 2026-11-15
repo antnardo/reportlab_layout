@@ -1,6 +1,6 @@
 """Coercing colours into the type reportlab expects."""
 
-from typing import TypeAlias
+from typing import TypeAlias, overload
 
 from reportlab.lib.colors import Color, HexColor, toColor
 
@@ -11,13 +11,19 @@ __all__ = ["ColorLike", "to_color"]
 ColorLike: TypeAlias = Color | str | tuple[float, ...] | list[float] | None
 
 
+@overload
+def to_color(value: None) -> None: ...
+@overload
+def to_color(value: Color | str | tuple[float, ...] | list[float]) -> Color: ...
 def to_color(value: ColorLike) -> Color | None:
     """Normalise a colour into a ``reportlab.lib.colors.Color``.
 
     Accepts a ``Color``, a CSS name, a hexadecimal string -- ``"#rrggbb"``,
     ``"#rrggbbaa"`` with its opacity, or the short ``"#rgb"`` and ``"#rgba"`` --
     and 3- or 4-tuples of floats in ``[0, 1]``, the fourth being the opacity.
-    ``None`` passes through: it means "do not touch the current colour".
+    ``None`` passes through: it means "do not touch the current colour". A
+    type checker knows it: anything but ``None`` gives a ``Color``, so a colour
+    constant needs no ``assert``.
 
     So neither ``HexColor`` nor ``Color`` needs importing to name a colour, and
     an opacity below 1 makes whatever is painted with it transparent.
