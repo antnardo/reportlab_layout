@@ -3,6 +3,7 @@
 import pytest
 from reportlab.pdfgen import canvas
 
+from reportlab_layout import PDFMaker
 from reportlab_layout.colors import to_color
 from reportlab_layout.shapes import ShapePainter
 
@@ -108,6 +109,28 @@ class TestToColor:
 
     def test_hex_string(self):
         assert to_color("#00ff00").rgb() == (0, 1, 0)
+
+    def test_hex_string_with_opacity(self):
+        color = to_color("#b3261e80")
+        assert color.hexval() == "0xb3261e"
+        assert color.alpha == pytest.approx(0x80 / 255)
+
+    @pytest.mark.parametrize(("short", "long"), [("#abc", "#aabbcc"), ("#0F8", "#00ff88")])
+    def test_short_hex_string(self, short, long):
+        assert to_color(short).rgb() == to_color(long).rgb()
+
+    def test_short_hex_string_with_opacity(self):
+        assert to_color("#f008").alpha == pytest.approx(0x88 / 255)
+
+    @pytest.mark.parametrize("value", ["#12345", "#ggg", "#"])
+    def test_malformed_hex_string_is_rejected(self, value):
+        with pytest.raises(ValueError, match="hexadecimal"):
+            to_color(value)
+
+    def test_opacity_makes_a_fill_transparent(self, out):
+        with PDFMaker(out) as doc:
+            doc.draw_rect(50, 50, 100, 40, fill="#b3261e66", stroke=None)
+        assert b"/ca .4" in out.read_bytes()
 
     def test_css_name(self):
         assert to_color("blue").rgb() == (0, 0, 1)
