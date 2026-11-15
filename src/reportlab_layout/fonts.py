@@ -55,6 +55,11 @@ def register_font_family(
     italic fall back on ``regular``, ``bold_italic`` on ``bold``, else on
     ``italic``, else on ``regular``.
 
+    A family of one file is the way to use a single TrueType font: ``<b>`` and
+    ``<i>`` then draw in that same face, as they do for a font registered alone
+    with ``registerFont`` -- reportlab never fakes a weight or a slant -- and
+    the file is embedded once, whichever name the text went through.
+
     Registering the same family again with the same files does nothing, so a
     module can do it at import time. With other files it raises ``ValueError``
     rather than changing the look of every document already using the name; so
@@ -81,11 +86,13 @@ def register_font_family(
     for path in dict.fromkeys(faces):
         if not path.is_file():
             raise FileNotFoundError(f"No font file at {path}")
+    reported: set[Path] = set()
     for suffix, path in zip(_SUFFIXES, faces, strict=True):
         font = TTFont(name + suffix, str(path))
         pdfmetrics.registerFont(font)
         face = font.face
-        if face.capHeight == face.ascent:
+        if face.capHeight == face.ascent and path not in reported:
+            reported.add(path)
             logger.warning(
                 "%s has no cap height of its own (OS/2 table older than version 2): "
                 "reportlab uses its ascent, and valign='cap' will sit too low",

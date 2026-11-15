@@ -97,3 +97,17 @@ class TestRegisterFontFamily:
         with caplog.at_level(logging.WARNING, logger="reportlab_layout.fonts"):
             register_vera(family)
         assert "no cap height of its own" in caplog.text
+
+    def test_a_face_without_cap_height_is_reported_once_per_file(self, family, caplog):
+        with caplog.at_level(logging.WARNING, logger="reportlab_layout.fonts"):
+            register_vera(family)
+        assert caplog.text.count("no cap height of its own") == 1
+
+    def test_one_file_embeds_once_whatever_the_markup(self, family, out):
+        register_vera(family)
+        style = ParagraphStyle("body", fontName=family, fontSize=11)
+        with PDFMaker(out) as doc:
+            doc.draw(Paragraph("plain <b>bold</b> <i>italic</i> <b><i>both</i></b>", style))
+        page = PdfReader(str(out)).pages[0]
+        names = [str(font["/BaseFont"]) for font in page["/Resources"]["/Font"].values()]
+        assert sum("Vera" in name for name in names) == 1
