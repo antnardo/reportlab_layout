@@ -11,6 +11,7 @@
 - [Font metrics](#font-metrics)
 - [TrueType fonts](#truetype-fonts)
 - [Shapes](#shapes)
+- [QR codes](#qr-codes)
 - [Images](#images)
 - [Images inside a line](#images-inside-a-line)
 - [PDF pages, as vector drawing](#pdf-pages-as-vector-drawing)
@@ -504,7 +505,30 @@ carries the table published in Adobe's AFM files (`STANDARD_CAP_HEIGHTS`), reads
 ascent as a last resort.
 
 `doc.metrics(style, scale)` returns the same object, resolving the style against
-the document's stylesheet.
+the document's stylesheet. Code that keeps a font and its size apart rather than
+in a style measures with `TextMetrics.of_font("Helvetica", 9)`, which makes the
+style itself, once per pair.
+
+### The lines of a text
+
+A box drawn around a text, before the text, needs its lines first:
+
+```python
+from reportlab_layout import TextMetrics, split_lines
+
+metrics = TextMetrics(style)
+lines = metrics.lines(comment, 160)  # or split_lines(comment, style, 160)
+box_width = max(map(metrics.width, lines), default=0)
+box_height = len(lines) * metrics.leading
+```
+
+A line breaks where a `Paragraph` breaks: at a space, a tab, a newline. Never at
+a no-break space — the one French puts before a colon or between a number and
+its unit — which stays in its line as it was; reportlab's `simpleSplit` breaks
+there and gives back an ordinary space. A newline always breaks, and a blank line
+stays, as `""`, where `simpleSplit` drops it. A word wider than `width` takes a
+line of its own and overflows it, so measure the widest line rather than trust
+`width`.
 
 ## TrueType fonts
 
@@ -533,9 +557,16 @@ The faces are registered as `Gentium`, `Gentium-Bold`, `Gentium-Italic` and
 takes the closest one given: bold and italic the regular face, bold italic the
 bold, else the italic, else the regular.
 
+A single font, one file with no bold or italic of its own, is a family of one:
+`register_font_family("ArialUnicode", path)`. `<b>` and `<i>` then draw in that
+same face, as they do for a font registered alone with reportlab's
+`registerFont` — reportlab never fakes a weight or a slant — and the file is
+embedded once, whichever of the four names the text went through.
+
 Registering the same family again with the same files does nothing, so a module
-can do it when imported; with other files, or under the name of a standard font,
-it raises `ValueError` rather than change documents already using the name.
+can do it when imported, or at each use instead of asking whether it is done;
+with other files, or under the name of a standard font, it raises `ValueError`
+rather than change documents already using the name.
 
 Two limits come from reportlab:
 
@@ -565,7 +596,11 @@ Every one of them also takes `dash` and `dash_phase`.
 
 `fill=None` leaves the inside empty; `stroke=None` drops the outline. Colours
 accept a 3- or 4-tuple in `0..1`, a `"#rrggbb"` string, a CSS name, or a
-reportlab `Color`. `radius` is clamped to half the shorter side.
+reportlab `Color`. An opacity comes as the fourth number of a tuple, or as
+`"#rrggbbaa"`, and makes what is painted with it transparent — a highlight over
+text, for instance; `"#rgb"` and `"#rgba"` are read as in CSS. `to_color` does
+the conversion, so naming a colour needs neither `HexColor` nor `Color`.
+`radius` is clamped to half the shorter side.
 
 `draw_ellipse` and `draw_circle` take a **centre** and radii, not a bounding box:
 a shape defined by a centre is nearly always placed by its centre, and
@@ -619,6 +654,38 @@ Both 1 and 2 extend the stroke by half its width beyond each end point — a 10 
 wide line comes out 10 pt longer overall — which the `Box` returned does not
 count. A round cap is what a freehand stroke, a highlighter or a hand-drawn tick
 wants: a butt end on a thick stroke reads as a cut.
+
+## QR codes
+
+```python
+from reportlab.lib.units import mm
+
+from reportlab_layout import qr_drawing, qr_matrix
+
+doc.draw(qr_drawing("DS3-017", 25 * mm, border=2), x=x, y=y, absolute=True)
+expected = qr_matrix("DS3-017")  # rows from the top, True for a dark module
+```
+
+`qr_drawing` returns a reportlab `Drawing`, `side` points square **quiet zone
+included**, which `doc.draw` lays like any flowable. The quiet zone is `border`
+modules wide: the standard asks for 4, and a code printed on a white margin of
+its own can make do with less. The correction level defaults to `H`, the most
+redundant (`QR_LEVELS` holds the four): a code on paper gets written on, creased
+and scanned grey, and `H` survives the loss of 30 % of it where reportlab's
+default `L` gives up at 7 %. `color` takes any `ColorLike`; the light modules
+are left out rather than painted white.
+
+`qr_matrix` gives the modules of that same code, for a program that reads its
+own codes back from a scan and compares what it sees with what it printed. Both
+run reportlab's encoder with the same choices, so the matrix and the drawing
+made from the same `payload`, `level` and `version` are the same code.
+`version` fixes the size, 4 × version + 17 modules a side; `None`, the default,
+takes the smallest that holds the payload. A payload too long for it raises
+`ValueError`.
+
+The modules are drawn as one path, filled once: reportlab's own
+`QrCodeWidget` draws a rectangle per run, which a viewer's anti-aliasing can
+show as hairlines between rows.
 
 ## Images
 
@@ -1533,6 +1600,15 @@ there for the times you want a piece on its own.
 from reportlab_layout import PDFMaker, make_stylesheet, add_style
 ```
 
+None of reportlab's own names is among them. The package takes and returns
+reportlab's objects — a `ParagraphStyle`, a `Color`, a `Flowable`, a `Drawing` —
+and those are imported from reportlab, a dependency anyway: `ParagraphStyle`
+from `reportlab.lib.styles`, `mm` from `reportlab.lib.units`, `Flowable` and
+`Spacer` from `reportlab.platypus` for a flowable of your own, `Drawing` and its
+shapes from `reportlab.graphics.shapes` for a vector drawing. What the package
+stands in for is the canvas: text, shapes, images and pages placed by its
+methods rather than by `canvas.drawString` and the like.
+
 ### The document
 
 | Name | What it is | Where |
@@ -1560,13 +1636,14 @@ from reportlab_layout import PDFMaker, make_stylesheet, add_style
 | `TextPainter` | draws anchored strings, behind `doc.text` and `doc.draw_string` | [Drawing text](#drawing-text) |
 | `TextMetrics` | a style's metrics at a given scale, and the anchor arithmetic | [Font metrics](#font-metrics) |
 | `string_width` | the width of a string in a style | [Font metrics](#font-metrics) |
+| `split_lines` | the lines a text breaks into at a width, no-break spaces kept | [The lines of a text](#the-lines-of-a-text) |
 | `font_ascent`, `font_descent` | how far a style reaches above and below the baseline | [Font metrics](#font-metrics) |
 | `font_height` | the height of its em box, `ascent - descent` | [Font metrics](#font-metrics) |
 | `cap_height` | the height of its capitals | [Font metrics](#font-metrics) |
 | `baseline_offset` | what to subtract from a target centre to get the baseline | [`middle` or `cap`?](#middle-or-cap) |
 | `register_font_family` | registers a TrueType family so `<b>` and `<i>` switch faces | [TrueType fonts](#truetype-fonts) |
 
-The five metric functions are shortcuts onto `TextMetrics`; reach for the class
+The metric functions are shortcuts onto `TextMetrics`; reach for the class
 when you want several figures at once, since it computes them from one lookup.
 
 ### Styles and colours
@@ -1578,7 +1655,7 @@ when you want several figures at once, since it computes them from one lookup.
 | `STYLES` | the shared default stylesheet — convenient, and a trap in a library | [Styles](#styles) |
 | `StyleLike` | a style, its name, or `None` for `Normal` | [Styles](#styles) |
 | `resolve_style` | turns any of those three into a `ParagraphStyle` | [Styles](#styles) |
-| `ColorLike` | a `Color`, a CSS name, `"#rrggbb"`, or a tuple in `0..1` | [Shapes](#shapes) |
+| `ColorLike` | a `Color`, a CSS name, `"#rrggbb"` or `"#rrggbbaa"`, or a tuple in `0..1` | [Shapes](#shapes) |
 | `to_color` | turns any of those into a reportlab `Color` | [Shapes](#shapes) |
 
 ### Shapes, images and frames
@@ -1586,6 +1663,9 @@ when you want several figures at once, since it computes them from one lookup.
 | Name | What it is | Where |
 | --- | --- | --- |
 | `ShapePainter` | rules, rectangles, ellipses and polygons, behind `doc.shapes` | [Shapes](#shapes) |
+| `qr_drawing` | a QR code of a given side, quiet zone included, as a `Drawing` | [QR codes](#qr-codes) |
+| `qr_matrix` | the modules of that same code, row by row | [QR codes](#qr-codes) |
+| `QR_LEVELS` | the four correction levels, `L` to `H` | [QR codes](#qr-codes) |
 | `ImageLike` | what an image may be given as: a path, bytes, an open file, a Pillow image | [Images](#images) |
 | `ImageSpec` | where an image comes from and its pixel size, read once | [Images](#images) |
 | `image_spec` | reads that size from a file | [Images](#images) |

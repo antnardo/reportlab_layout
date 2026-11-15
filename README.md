@@ -81,7 +81,10 @@ doc.advance(30)                                              # the cursor follow
 - **What a report needs and reportlab lacks.** Columns that carry on from page
   to page and end level, as LaTeX's `multicols` does; TrueType families whose
   bold and italic work in markup; images set on the baseline, for formulas
-  typeset elsewhere; a tag flush right on the last line of a paragraph.
+  typeset elsewhere; a tag flush right on the last line of a paragraph; the
+  lines of a text before it is drawn, no-break spaces kept whole; QR codes sized
+  by their side, and the modules they encode, for a program that reads its own
+  codes back from a scan.
 - **Nothing falls off the page.** A block taller than the page splits from the
   cursor over as many pages as it takes, a table between two rows with its
   heading repeated; one that cannot split starts a fresh page and says so in the

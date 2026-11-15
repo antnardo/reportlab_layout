@@ -3,6 +3,31 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The lines of a text**: `split_lines(text, style, width, scale)` and
+  `TextMetrics.lines(text, width)`, for the box drawn around a text before the
+  text. A line breaks where a `Paragraph` breaks, never at a no-break space,
+  which stays as it was; a blank line stays too. reportlab's `simpleSplit` breaks
+  at both and gives back ordinary spaces.
+- `TextMetrics.of_font(name, size)`, for code that keeps a font apart from its
+  size: measuring no longer needs a style made for the purpose.
+- **QR codes**: `qr_drawing(payload, side, level=, border=, version=, color=)`
+  returns a `Drawing` `side` points square, quiet zone included, at level `H` by
+  default; `qr_matrix` gives the modules of the same code, for a program that
+  compares a scan with what it printed. The modules are one path, filled once.
+  `QR_LEVELS` holds the four levels.
+
+### Fixed
+
+- `to_color` reads `"#rrggbbaa"` with its opacity and spells out `"#rgb"` and
+  `"#rgba"`, as CSS does; reportlab's `HexColor` read all three as some other
+  colour, silently. A malformed one raises `ValueError`.
+- A font file without a cap height of its own is reported once, not once per
+  face of its family.
+
 ## [1.12.0] — 2026-10-31
 
 ### Added
