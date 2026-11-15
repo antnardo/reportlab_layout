@@ -11,6 +11,7 @@ from reportlab_layout.metrics import (
     font_ascent,
     font_descent,
     font_height,
+    split_lines,
     string_width,
 )
 
@@ -94,6 +95,56 @@ class TestModuleHelpers:
         assert font_ascent(normal, 0.75) == pytest.approx(metrics.ascent)
         assert font_descent(normal, 0.75) == pytest.approx(metrics.descent)
         assert font_height(normal, 0.75) == pytest.approx(metrics.height)
+
+
+class TestLines:
+    def test_lines_fit_the_width(self, normal):
+        metrics = TextMetrics(normal)
+        text = "the quick brown fox jumps over the lazy dog " * 4
+        lines = metrics.lines(text, 80)
+        assert len(lines) > 1
+        assert all(metrics.width(line) <= 80 for line in lines)
+        assert " ".join(lines) == text.strip()
+
+    def test_a_no_break_space_holds_its_words_together(self, normal):
+        metrics = TextMetrics(normal)
+        width = metrics.width("Note\u00a0") + 1
+        assert metrics.lines("Note\u00a0: 14\u202f/\u202f20", width) == ["Note\u00a0:", "14\u202f/\u202f20"]
+
+    def test_a_newline_always_breaks_and_a_blank_line_stays(self, normal):
+        assert TextMetrics(normal).lines("one\n\ntwo\n", 500) == ["one", "", "two"]
+
+    def test_runs_of_spaces_count_as_one(self, normal):
+        assert TextMetrics(normal).lines("  a \t  b  ", 500) == ["a b"]
+
+    def test_a_word_wider_than_the_width_takes_its_own_line(self, normal):
+        assert TextMetrics(normal).lines("a anticonstitutionnellement b", 20) == [
+            "a",
+            "anticonstitutionnellement",
+            "b",
+        ]
+
+    def test_an_empty_text_has_no_line(self, normal):
+        assert TextMetrics(normal).lines("", 100) == []
+
+    def test_lines_follow_the_scale(self, normal):
+        text = "the quick brown fox jumps over the lazy dog"
+        width = TextMetrics(normal).width(text)
+        assert split_lines(text, normal, width) == [text]
+        assert split_lines(text, normal, width / 2, scale=0.5) == [text]
+        assert len(split_lines(text, normal, width, scale=2)) > 1
+
+
+class TestOfFont:
+    def test_measures_as_a_style_of_that_font_and_size(self):
+        style = ParagraphStyle("t", fontName="Times-Roman", fontSize=13)
+        metrics = TextMetrics.of_font("Times-Roman", 13)
+        assert metrics.width("Abc") == pytest.approx(TextMetrics(style).width("Abc"))
+        assert metrics.ascent == pytest.approx(TextMetrics(style).ascent)
+        assert metrics.cap_height == pytest.approx(TextMetrics(style).cap_height)
+
+    def test_the_style_is_made_once_per_font_and_size(self):
+        assert TextMetrics.of_font("Courier", 9).style is TextMetrics.of_font("Courier", 9).style
 
 
 class TestCapHeight:

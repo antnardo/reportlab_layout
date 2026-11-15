@@ -46,6 +46,7 @@ from reportlab_layout.metrics import (
     font_ascent,
     font_descent,
     font_height,
+    split_lines,
     string_width,
 )
 from reportlab_layout.numbering import NumberedCanvas
@@ -115,6 +116,7 @@ __all__ = [
     "register_font_family",
     "resolve_pagesize",
     "resolve_style",
+    "split_lines",
     "string_width",
     "to_color",
 ]
