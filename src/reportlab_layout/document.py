@@ -17,6 +17,7 @@ In between, giving ``x`` and/or ``y`` without ``absolute`` reads them in
 
 import itertools
 import logging
+import math
 import os
 import threading
 import weakref
@@ -186,6 +187,53 @@ class _Stack(Flowable):
         for placement in self.packing.placements:
             bottom = self.height - placement.bottom
             placement.flowable.drawOn(self.canv, 0, bottom, _sW=self.width - placement.width)
+
+
+class _Turned(Flowable):
+    """A flowable turned about its middle: what :meth:`PDFMaker.draw` lays for ``angle``.
+
+    Its box is the upright rectangle around the turned one, so the anchors of
+    ``draw`` -- ``halign``, ``valign``, the cursor -- place what is seen on the
+    page. A quarter turn wraps the flowable in the available height rather than
+    width, the way a paragraph set up a margin reads: the space it runs along
+    is the page's height. Exact quarter turns use exact sines, or a 90° turn
+    would come out 1e-16 pt wider than tall.
+    """
+
+    def __init__(self, turned: Flowable, angle: float) -> None:
+        super().__init__()
+        self.turned = turned
+        self.angle = angle
+        self.spaceBefore = turned.getSpaceBefore()
+        self.spaceAfter = turned.getSpaceAfter()
+        quarter = angle / 90
+        if quarter == round(quarter):
+            sin, cos = ((0, 1), (1, 0), (0, -1), (-1, 0))[round(quarter) % 4]
+            self._sin, self._cos = float(sin), float(cos)
+            self._sideways = round(quarter) % 2 == 1
+        else:
+            self._sin, self._cos = math.sin(math.radians(angle)), math.cos(math.radians(angle))
+            self._sideways = False
+        self._inner = (0.0, 0.0)
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        if self._sideways:
+            available_width, available_height = available_height, available_width
+        width, height = self.turned.wrapOn(self.canv, available_width, available_height)
+        self._inner = (width, height)
+        sin, cos = abs(self._sin), abs(self._cos)
+        self.width = width * cos + height * sin
+        self.height = width * sin + height * cos
+        return self.width, self.height
+
+    def draw(self) -> None:
+        width, height = self._inner
+        canvas = self.canv
+        canvas.saveState()
+        canvas.translate(self.width / 2, self.height / 2)
+        canvas.transform(self._cos, self._sin, -self._sin, self._cos, 0, 0)
+        self.turned.drawOn(canvas, -width / 2, -height / 2)
+        canvas.restoreState()
 
 
 class _Ascii85Switch:
@@ -522,6 +570,7 @@ class PDFMaker:
         halign: str = "left",
         valign: str = "bottom",
         wscale: float = 1.0,
+        angle: float = 0,
         page_break: bool | None = None,
         show_boundary: bool | None = None,
     ) -> Box:
@@ -557,6 +606,14 @@ class PDFMaker:
         split over the pages, as any block would be. ``halign`` and
         ``valign`` place that box, and the box is what comes back.
 
+        ``angle`` turns the element about its middle, in degrees
+        counterclockwise, as for :meth:`draw_string`. The box, and every anchor
+        above, is then the upright rectangle around what is seen; a quarter turn
+        wraps the element in ``height`` (or what the page leaves) rather than
+        ``width``, the way text set up a margin runs. A turned element does not
+        split over pages: in flow it moves to a new page whole, and ``"cap"``
+        is refused, its capitals no longer standing on a line.
+
         An element that runs off the page, in any mode, is logged as well:
         what lies past the edge is lost, and the PDF says nothing of it.
         """
@@ -564,11 +621,13 @@ class PDFMaker:
         allow_break = self.auto_page_break if page_break is None else page_break
         outline = self.show_boundaries if show_boundary is None else show_boundary
         block = _Stack(flowable) if isinstance(flowable, KeepTogether) else flowable
+        if angle:
+            block = _Turned(block, angle)
 
         box = self._place(block, x, y, width, height, before, absolute, halign, valign, wscale)
         if flow and allow_break and box.y < self.bottom:
             # A new page sends the cursor back to the top: the box rises by as much.
-            if box.y + self.cursor.depth - self.cursor.top < self.bottom:
+            if not angle and box.y + self.cursor.depth - self.cursor.top < self.bottom:
                 return self._draw_over_pages(flowable, x, width, before, halign, wscale, outline)
             self.new_page()
             box = self._place(block, x, y, width, height, before, absolute, halign, valign, wscale)
@@ -733,6 +792,8 @@ class PDFMaker:
         if valign == "cap":
             if not isinstance(flowable, Paragraph):
                 given = flowable.kept if isinstance(flowable, _Stack) else flowable
+                if isinstance(given, _Turned):
+                    raise ValueError("valign='cap' does not apply to a turned element: use 'middle'")
                 raise ValueError(
                     f"valign='cap' needs a Paragraph, and {type(given).__name__} is not one: use 'middle'"
                 )

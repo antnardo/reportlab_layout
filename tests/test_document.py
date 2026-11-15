@@ -761,6 +761,77 @@ class TestTables:
             doc.draw_table([])
 
 
+class Block(Flowable):
+    """A solid rectangle, to see where a turned element lands."""
+
+    def __init__(self, width, height):
+        super().__init__()
+        self.block_width, self.block_height = width, height
+
+    def wrap(self, available_width, available_height):
+        return self.block_width, self.block_height
+
+    def draw(self):
+        self.canv.rect(0, 0, self.block_width, self.block_height, stroke=0, fill=1)
+
+
+class TestAngle:
+    @pytest.mark.parametrize("angle", [90, 270, -90])
+    def test_a_quarter_turn_swaps_the_box(self, doc, angle):
+        box = doc.draw(Block(100, 30), x=200, y=300, absolute=True, angle=angle)
+        assert box == Box(200, 300, 30, 100)
+
+    def test_a_half_turn_keeps_the_box(self, doc):
+        assert doc.draw(Block(100, 30), x=200, y=300, absolute=True, angle=180) == Box(200, 300, 100, 30)
+
+    def test_any_angle_gives_the_upright_box_around_it(self, doc):
+        box = doc.draw(Block(100, 30), x=200, y=300, absolute=True, angle=30)
+        assert box.width == pytest.approx(100 * 3**0.5 / 2 + 30 / 2)
+        assert box.height == pytest.approx(100 / 2 + 30 * 3**0.5 / 2)
+
+    @pytest.mark.parametrize("angle", [90, 30, 180])
+    def test_the_ink_fills_the_box(self, out, ink, angle):
+        with PDFMaker(out) as doc:
+            box = doc.draw(Block(100, 30), x=200, y=300, absolute=True, angle=angle, halign="center")
+        seen = ink(out, dpi=300)
+        pixel = 72 / 300
+        assert seen.left == pytest.approx(box.x, abs=pixel)
+        assert seen.right == pytest.approx(box.right, abs=pixel)
+        assert seen.bottom == pytest.approx(box.y, abs=pixel)
+        assert seen.top == pytest.approx(box.top, abs=pixel)
+
+    def test_text_turned_a_quarter_reads_upwards(self, out):
+        with PDFMaker(out) as doc:
+            doc.draw_paragraph("Rising", x=100, y=100, height=200, absolute=True, angle=90)
+        chars = []
+        PdfReader(str(out)).pages[0].extract_text(
+            visitor_text=lambda text, cm, tm, *_: chars.append((text, cm)) if text.strip() else None
+        )
+        (text, matrix), *_ = chars
+        assert "Rising" in text
+        assert matrix[:4] == pytest.approx([0, 1, -1, 0])
+
+    def test_a_quarter_turn_wraps_in_the_height(self, doc, stylesheet):
+        paragraph = Paragraph("a b c d e f g h i j k l m n o p", stylesheet["Normal"])
+        box = doc.draw(paragraph, x=100, y=100, height=150, absolute=True, angle=90)
+        assert box.height == pytest.approx(150)
+
+    def test_in_flow_the_cursor_moves_by_the_turned_height(self, doc):
+        before = doc.cursor.depth
+        doc.draw(Block(100, 30), angle=90)
+        assert doc.cursor.depth - before == pytest.approx(100)
+
+    def test_a_turned_block_moves_to_a_new_page_whole(self, doc):
+        doc.advance(doc.remaining_height - 50)
+        box = doc.draw(Block(100, 30), angle=90, page_break=True)
+        assert doc.page == 2
+        assert box.top == pytest.approx(doc.geometry.depth_to_y(doc.cursor.top))
+
+    def test_cap_is_refused_for_a_turned_paragraph(self, doc):
+        with pytest.raises(ValueError, match="turned"):
+            doc.draw_paragraph("Title", x=100, y=100, absolute=True, valign="cap", angle=90)
+
+
 class TestImages:
     def test_image_keeps_its_aspect_ratio(self, doc, picture):
         box = doc.draw_image(picture, width=80)
