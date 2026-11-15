@@ -3,6 +3,22 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] — 2026-11-15
+
+### Added
+
+- **`angle=` on `draw`** — and so on `draw_paragraph`, `draw_image` and every
+  method laying a flowable: the element turns about its middle, degrees
+  counterclockwise. The box and the anchors are the upright rectangle around
+  what is seen; a quarter turn wraps the element in the height. A turned
+  element moves to a new page whole rather than split.
+- **`PaintedFlowable`**: a flowable of your own, drawn in `paint` with
+  `self.text`, `self.shapes` and `self.image` — the painters of a page, in the
+  flowable's coordinates — rather than with the bare canvas.
+- **reportlab's names the package's signatures use**: `ParagraphStyle`,
+  `StyleSheet1`, `Color`, `Flowable`, `Drawing`, and `mm`, `cm`, `inch` for
+  `unit=`. They are reportlab's own objects; no other name comes through.
+
 ## [1.13.0] — 2026-11-15
 
 ### Added
