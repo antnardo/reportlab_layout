@@ -19,6 +19,7 @@
 - [Markdown with formulas](#markdown-with-formulas)
 - [A tag at the end of a paragraph](#a-tag-at-the-end-of-a-paragraph)
 - [Annotations a reader can move](#annotations-a-reader-can-move)
+- [A flowable of your own](#a-flowable-of-your-own)
 - [Styles](#styles)
 - [Header and footer](#header-and-footer)
 - [Pagination](#pagination)
@@ -232,6 +233,7 @@ The keywords `draw` shares with all of them:
 | `halign` | `"left"`, `"center"`, `"right"` — with `wscale` in flow; in absolute mode, the point of the element on `x` |
 | `valign` | `"bottom"`, `"middle"`, `"top"`, and `"cap"` for a paragraph — **in absolute mode only** |
 | `wscale` | fraction of the content width the block occupies |
+| `angle` | turns the element about its middle, degrees counterclockwise |
 | `page_break` | `None` follows `auto_page_break`; `True`/`False` force it |
 | `show_boundary` | outline the element's box |
 
@@ -248,6 +250,25 @@ half-width block against the right margin. There `halign` places a block
 `wscale` content widths wide and never looks at the element's own width, so on
 its own it does nothing. To centre an image, see [Images](#images). In absolute
 mode, `halign` uses the element's width and `wscale` is ignored.
+
+### Turned elements
+
+```python
+doc.draw(qr_drawing("DS3-017", 20 * mm), x=x, y=y, absolute=True, angle=90)
+doc.draw_paragraph("Corrected on 15 November", x=12, y=100, height=300, absolute=True, angle=90)
+```
+
+`angle` turns any element about its middle, in degrees counterclockwise, as
+`draw_string` does: `90` reads bottom to top. The box returned, and everything
+that places it — `halign`, `valign`, the cursor in flow — is the upright
+rectangle around what is seen, so a code turned 30° takes the room its corners
+need. A quarter turn wraps the element in `height` rather than `width` — what
+the page leaves, when `height` is not given — the way text set up a margin
+runs along the page's height; pass `height` to keep such a paragraph short.
+
+A turned element does not split over pages: in flow, with page breaks on, it
+moves to the next page whole. `valign="cap"` is refused for it, since its
+capitals no longer stand on a horizontal line.
 
 ### Several flowables as one block
 
@@ -658,9 +679,7 @@ wants: a butt end on a thick stroke reads as a cut.
 ## QR codes
 
 ```python
-from reportlab.lib.units import mm
-
-from reportlab_layout import qr_drawing, qr_matrix
+from reportlab_layout import mm, qr_drawing, qr_matrix
 
 doc.draw(qr_drawing("DS3-017", 25 * mm, border=2), x=x, y=y, absolute=True)
 expected = qr_matrix("DS3-017")  # rows from the top, True for a dark module
@@ -1239,6 +1258,51 @@ one, pypdf's `extract_text` does not, nor does pdfium's text API until the page
 is flattened (`FPDFPage_Flatten`). Check what an annotation holds by rendering
 the page, or by reading its appearance stream.
 
+## A flowable of your own
+
+A row reportlab has no flowable for — a mark drawn as a bar, a legend whose
+entries are drawn shapes — is a `Flowable` subclass: `wrap` says how big it is,
+`draw` draws it. `PaintedFlowable` lets it draw with the painters a document
+has, rather than with the bare canvas:
+
+```python
+from reportlab_layout import PaintedFlowable, TextMetrics
+
+
+class MarkBar(PaintedFlowable):
+    def __init__(self, label: str, fraction: float, text: str) -> None:
+        super().__init__()
+        self.label, self.fraction, self.text_value = label, fraction, text
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        self.width, self.height = available_width, 18
+        return self.width, self.height
+
+    def paint(self) -> None:
+        bar_x, bar_width = 0.3 * self.width, 0.5 * self.width
+        self.text.draw(self.label, 0, 9, valign="cap")
+        self.shapes.round_rect(bar_x, 5, bar_width, 8, radius=4, fill="#e0e0e0", stroke=None)
+        self.shapes.round_rect(bar_x, 5, self.fraction * bar_width, 8, radius=4, fill="#1565c0", stroke=None)
+        self.text.draw(self.text_value, self.width, 9, halign="right", valign="cap")
+
+
+doc.draw(MarkBar("Mechanics", 0.7, "14 / 20"))
+```
+
+In `paint`, `self.text` is a `TextPainter`, `self.shapes` a `ShapePainter`, and
+`self.image(source, x, y, width=…)` draws an image — a path, bytes, a Pillow
+image, transparency kept — all in the flowable's own coordinates, from its
+lower-left corner. So the anchors work inside a flowable as on a page: a label
+centred on its capitals with `valign="cap"` rather than on `0.35 × size`, a
+faux bold with `outline=`. Each call isolates its state: a fill colour or a
+text render mode set for one stamp does not carry over to the next drawing.
+
+`wrap` stays reportlab's, written as for any flowable, with `TextMetrics` to
+measure what the flowable will hold — `TextMetrics.of_font(font, size)` when
+the font and the size are kept apart. Style names given to `self.text` resolve
+against `stylesheet`, a class or instance attribute, the shared sheet when it
+is left to `None`.
+
 ## Styles
 
 ```python
@@ -1600,14 +1664,27 @@ there for the times you want a piece on its own.
 from reportlab_layout import PDFMaker, make_stylesheet, add_style
 ```
 
-None of reportlab's own names is among them. The package takes and returns
-reportlab's objects — a `ParagraphStyle`, a `Color`, a `Flowable`, a `Drawing` —
-and those are imported from reportlab, a dependency anyway: `ParagraphStyle`
-from `reportlab.lib.styles`, `mm` from `reportlab.lib.units`, `Flowable` and
-`Spacer` from `reportlab.platypus` for a flowable of your own, `Drawing` and its
-shapes from `reportlab.graphics.shapes` for a vector drawing. What the package
-stands in for is the canvas: text, shapes, images and pages placed by its
-methods rather than by `canvas.drawString` and the like.
+### reportlab's own names
+
+The package hands on the reportlab names its public signatures take or return,
+so that a document needs no import from reportlab for them. They are
+reportlab's own objects, not copies: `reportlab_layout.ParagraphStyle is
+reportlab.lib.styles.ParagraphStyle`, and the two mix freely.
+
+| Name | Why it is here |
+| --- | --- |
+| `ParagraphStyle`, `StyleSheet1` | what a `StyleLike` and a stylesheet are |
+| `Color` | what `to_color` returns and a `ColorLike` may be |
+| `Flowable` | what `draw` lays; `PaintedFlowable` derives from it |
+| `Drawing` | what `qr_drawing` returns, and what `draw` lays a vector drawing as |
+| `mm`, `cm`, `inch` | values for a document's `unit`, millimetres by default |
+
+The rule is that one, and a test holds it: no other name of reportlab comes
+through. `HexColor` is not needed (`to_color("#b3261e")`), a `Spacer` comes
+from `doc.make_spacer`, and what lies deeper — the shapes of
+`reportlab.graphics`, `ImageReader`, the canvas itself — is imported from
+reportlab where it is really used. Such an import then says something: the code
+reaches past the package, and that is worth a look.
 
 ### The document
 
@@ -1634,6 +1711,7 @@ methods rather than by `canvas.drawString` and the like.
 | Name | What it is | Where |
 | --- | --- | --- |
 | `TextPainter` | draws anchored strings, behind `doc.text` and `doc.draw_string` | [Drawing text](#drawing-text) |
+| `PaintedFlowable` | a flowable of your own, drawn with the painters | [A flowable of your own](#a-flowable-of-your-own) |
 | `TextMetrics` | a style's metrics at a given scale, and the anchor arithmetic | [Font metrics](#font-metrics) |
 | `string_width` | the width of a string in a style | [Font metrics](#font-metrics) |
 | `split_lines` | the lines a text breaks into at a width, no-break spaces kept | [The lines of a text](#the-lines-of-a-text) |

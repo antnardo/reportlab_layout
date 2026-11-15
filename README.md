@@ -84,7 +84,13 @@ doc.advance(30)                                              # the cursor follow
   typeset elsewhere; a tag flush right on the last line of a paragraph; the
   lines of a text before it is drawn, no-break spaces kept whole; QR codes sized
   by their side, and the modules they encode, for a program that reads its own
-  codes back from a scan.
+  codes back from a scan; any element turned, `angle=` on `draw`.
+- **The canvas left behind, even in a flowable of your own.** A
+  `PaintedFlowable` draws with the same painters as a page — anchored text,
+  shapes, images — rather than with reportlab's bare canvas. The reportlab
+  names the package's own signatures use, `ParagraphStyle`, `Color`, `mm` and
+  a few more, come from it too: an import from reportlab left in a project
+  marks code that reaches past it.
 - **Nothing falls off the page.** A block taller than the page splits from the
   cursor over as many pages as it takes, a table between two rows with its
   heading repeated; one that cannot split starts a fresh page and says so in the
