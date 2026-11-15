@@ -3,6 +3,19 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] — 2026-11-15
+
+### Added
+
+- `PaintedFlowable.place(flowable, x, y, width)`: a flowable inside a painted
+  one — a paragraph beside a label — wrapped, drawn, its box returned, without
+  reaching for the canvas.
+
+### Changed
+
+- `to_color` is typed by overloads: given anything but `None`, a type checker
+  knows it returns a `Color`, and a colour constant needs no `assert`.
+
 ## [1.14.0] — 2026-11-15
 
 ### Added
