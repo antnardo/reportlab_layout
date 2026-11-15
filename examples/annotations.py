@@ -13,9 +13,8 @@ import io
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-from reportlab.pdfbase.pdfmetrics import stringWidth
 
-from reportlab_layout import Box, PDFMaker
+from reportlab_layout import Box, PDFMaker, TextMetrics
 
 RED = "#c62828"
 GREEN = "#2e7d32"
@@ -53,7 +52,7 @@ def tick(doc: PDFMaker, x: float, y: float) -> None:
 
 def comment(doc: PDFMaker, text: str, x: float, y: float, note: str) -> None:
     """A boxed remark whose lower-left corner is ``(x, y)``; ``note`` is what the reader lists."""
-    width, height = stringWidth(text, "Helvetica", 11) + 10, 18
+    width, height = TextMetrics.of_font("Helvetica", 11).width(text) + 10, 18
     with doc.annotation(x, y, width, height, contents=note, author=MARKER):
         # A stroke straddles its path: kept half a line width inside, it is not clipped.
         doc.draw_round_rect(
@@ -64,7 +63,7 @@ def comment(doc: PDFMaker, text: str, x: float, y: float, note: str) -> None:
 
 def highlight(doc: PDFMaker, line: Box, text: str, note: str) -> None:
     """A see-through band over the first line of a paragraph."""
-    width = stringWidth(text, "Helvetica", 12) + 4
+    width = TextMetrics.of_font("Helvetica", 12).width(text) + 4
     x, y = line.x - 2, line.y + line.height - 15
     with doc.annotation(x, y, width, 15, contents=note, author=MARKER):
         doc.draw_rect(x, y, width, 15, fill=HIGHLIGHT, stroke=None)
